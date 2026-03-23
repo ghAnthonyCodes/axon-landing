@@ -62,6 +62,10 @@
     padding: 0.3rem 0.9rem;
   }
   .nav-links a.cta:hover { background: var(--accent); color: var(--btn-text); }
+  @media (max-width: 600px) {
+    .nav-links a:not(.cta) { display: none; }
+    .nav-links a.cta { margin-left: 0; }
+  }
 
   /* ── Hero ── */
   .hero {
