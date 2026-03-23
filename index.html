@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AXON: Simulation Infrastructure</title>
+<style>
+  /* ── Palette ── */
+  :root {
+    --bg:       #141414;
+    --surface:  #1e1e1e;
+    --accent:   #57c4b8;
+    --text:     #d4d4d4;
+    --muted:    #6a6a6a;
+    --border:   rgba(212,212,212,0.1);
+    --btn-text: #141414;
+  }
+
+  /* ── Reset ── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 16px; scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, sans-serif;
+    line-height: 1.6;
+  }
+
+  /* ── Layout ── */
+  .container { max-width: 860px; margin: 0 auto; padding: 0 2rem; }
+
+  /* ── Nav ── */
+  nav {
+    border-bottom: 1px solid var(--border);
+    padding: 1.25rem 0;
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    z-index: 10;
+  }
+  nav .container { display: flex; align-items: center; justify-content: space-between; }
+  .logo {
+    font-family: monospace;
+    font-size: 1.1rem;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    color: var(--accent);
+    text-transform: uppercase;
+    text-decoration: none;
+  }
+  .nav-links a {
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.875rem;
+    margin-left: 2rem;
+    transition: color 0.2s;
+  }
+  .nav-links a:hover { color: var(--text); }
+  .nav-links a.cta {
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    padding: 0.3rem 0.9rem;
+  }
+  .nav-links a.cta:hover { background: var(--accent); color: var(--btn-text); }
+
+  /* ── Hero ── */
+  .hero {
+    padding: 7rem 0 6rem;
+    text-align: center;
+  }
+  .eyebrow {
+    font-family: monospace;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 1.75rem;
+  }
+  h1 {
+    font-size: clamp(2.25rem, 5vw, 3.5rem);
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    margin-bottom: 1.5rem;
+    color: #f0f0f0;
+  }
+  h1 em {
+    font-style: normal;
+    color: var(--accent);
+  }
+  .hero-sub {
+    font-size: 1.1rem;
+    color: var(--muted);
+    max-width: 540px;
+    margin: 0 auto 2.75rem;
+    line-height: 1.7;
+  }
+  .cta-group { display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap; }
+  .btn {
+    padding: 0.75rem 1.75rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: opacity 0.2s, background 0.2s, color 0.2s;
+    text-decoration: none;
+    display: inline-block;
+    letter-spacing: 0.02em;
+  }
+  .btn:active { opacity: 0.8; }
+  .btn-primary { background: var(--accent); color: var(--btn-text); }
+  .btn-primary:hover { opacity: 0.88; }
+  .btn-secondary {
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* ── Divider ── */
+  .divider { border: none; border-top: 1px solid var(--border); margin: 0; }
+
+  /* ── How it works ── */
+  .how { padding: 5rem 0; }
+  .section-label {
+    font-family: monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 1rem;
+  }
+  h2 {
+    font-size: 1.75rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: #f0f0f0;
+    margin-bottom: 0.6rem;
+  }
+  .section-sub {
+    color: var(--muted);
+    font-size: 0.95rem;
+    margin-bottom: 3rem;
+  }
+  .steps { display: flex; flex-direction: column; gap: 0; }
+  .step {
+    display: grid;
+    grid-template-columns: 3rem 1fr;
+    gap: 1.25rem;
+    padding: 1.5rem 0;
+    border-bottom: 1px solid var(--border);
+    align-items: start;
+  }
+  .step:first-child { border-top: 1px solid var(--border); }
+  .step-num {
+    font-family: monospace;
+    font-size: 0.75rem;
+    color: var(--accent);
+    padding-top: 0.2rem;
+    letter-spacing: 0.05em;
+  }
+  .step-title { font-weight: 600; color: #f0f0f0; margin-bottom: 0.3rem; font-size: 0.95rem; }
+  .step p { color: var(--muted); font-size: 0.875rem; }
+
+  /* ── Features ── */
+  .features { padding: 5rem 0; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1px; background: var(--border); border: 1px solid var(--border); }
+  .card {
+    background: var(--bg);
+    padding: 1.75rem;
+  }
+  .card-icon {
+    font-family: monospace;
+    font-size: 0.7rem;
+    color: var(--accent);
+    letter-spacing: 0.1em;
+    margin-bottom: 1rem;
+  }
+  .card-title { font-weight: 600; color: #f0f0f0; margin-bottom: 0.5rem; font-size: 0.95rem; }
+  .card p { color: var(--muted); font-size: 0.875rem; line-height: 1.65; }
+
+  /* ── Who it's for ── */
+  .audience { padding: 5rem 0; }
+  .audience-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.25rem; margin-top: 2.5rem; }
+  .audience-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 1.25rem 1.5rem;
+  }
+  .audience-item strong { display: block; color: #f0f0f0; font-size: 0.9rem; margin-bottom: 0.3rem; }
+  .audience-item span { color: var(--muted); font-size: 0.8rem; }
+
+  /* ── Waitlist ── */
+  .waitlist {
+    padding: 6rem 0;
+    border-top: 1px solid var(--border);
+    text-align: center;
+  }
+  .waitlist h2 { margin-bottom: 0.6rem; }
+  .waitlist .section-sub { margin-bottom: 2.5rem; }
+  form {
+    max-width: 480px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    text-align: left;
+  }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+  label {
+    font-size: 0.75rem;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    display: block;
+    margin-bottom: 0.3rem;
+  }
+  input, textarea, select {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 0.65rem 0.9rem;
+    font-size: 0.9rem;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.2s;
+    border-radius: 0;
+    appearance: none;
+  }
+  input:focus, textarea:focus, select:focus { border-color: var(--accent); }
+  input::placeholder, textarea::placeholder { color: var(--muted); }
+  textarea { resize: vertical; min-height: 80px; }
+  .field { display: flex; flex-direction: column; }
+  .optional { color: var(--muted); font-size: 0.65rem; margin-left: 0.4rem; text-transform: none; letter-spacing: 0; }
+  .form-submit { margin-top: 0.5rem; }
+  .form-note { font-size: 0.75rem; color: var(--muted); text-align: center; margin-top: 0.75rem; }
+
+  /* ── Myelin section ── */
+  .myelin {
+    padding: 6rem 0;
+    border-top: 1px solid var(--border);
+  }
+  .myelin-inner {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4rem;
+    align-items: center;
+  }
+  @media (max-width: 640px) { .myelin-inner { grid-template-columns: 1fr; gap: 2.5rem; } }
+  .myelin-label {
+    font-family: monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: #d3869b;
+    margin-bottom: 1rem;
+  }
+  .myelin h2 { margin-bottom: 0.75rem; }
+  .myelin p { color: var(--muted); font-size: 0.9rem; line-height: 1.7; margin-bottom: 1rem; }
+  .myelin p:last-of-type { margin-bottom: 1.5rem; }
+  .btn-myelin {
+    background: #d3869b;
+    color: #141414;
+    padding: 0.75rem 1.75rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    text-decoration: none;
+    display: inline-block;
+    transition: opacity 0.2s;
+  }
+  .btn-myelin:hover { opacity: 0.88; }
+  .code-block {
+    font-family: monospace;
+    font-size: 0.78rem;
+    line-height: 1.8;
+  }
+  .code-label {
+    font-family: monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 0.4rem 0.75rem;
+    display: block;
+  }
+  .code-label.before { background: #2a2a2a; color: var(--muted); border: 1px solid var(--border); border-bottom: none; }
+  .code-label.after  { background: #1e1a1e; color: #d3869b; border: 1px solid rgba(211,134,155,0.25); border-bottom: none; }
+  .code-body {
+    padding: 1rem 1rem;
+    border: 1px solid var(--border);
+  }
+  .code-body.after { border-color: rgba(211,134,155,0.25); background: #1a161a; }
+  .code-arrow {
+    text-align: center;
+    color: #d3869b;
+    font-family: monospace;
+    font-size: 0.8rem;
+    padding: 0.6rem 0;
+    letter-spacing: 0.1em;
+  }
+  .c-accent { color: #d3869b; }
+  .c-dim    { color: #4a4a4a; }
+  .c-green  { color: #8ec07c; }
+  .c-text   { color: var(--text); }
+
+  /* ── Footer ── */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 2rem 0;
+    color: var(--muted);
+    font-size: 0.78rem;
+  }
+  footer .container { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; }
+  footer a { color: var(--muted); text-decoration: none; }
+  footer a:hover { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="container">
+    <a class="logo" href="#">AXON</a>
+    <div class="nav-links">
+      <a href="#how-it-works">How it works</a>
+      <a href="#myelin">Myelin</a>
+      <a href="#waitlist" class="cta">Join Waitlist</a>
+    </div>
+  </div>
+</nav>
+
+<main>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="container">
+      <p class="eyebrow">Simulation Infrastructure</p>
+      <h1>Scalable<br>simulation infrastructure<br>for <em>regulated science</em>.</h1>
+      <p class="hero-sub">Upload your simulation binaries. Define your scenarios. AXON handles orchestration, parallelism, audit trails, and benchmark reporting so you can focus on the science.</p>
+      <div class="cta-group">
+        <a href="#waitlist" class="btn btn-primary">Join the Waitlist</a>
+        <a href="#myelin" class="btn btn-secondary">Get started free</a>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- How it works -->
+  <section class="how" id="how-it-works">
+    <div class="container">
+      <p class="section-label">How it works</p>
+      <h2>Drop in your binaries.<br>AXON does the rest.</h2>
+      <p class="section-sub">Your existing binaries. Your existing workflows. Just faster and at scale.</p>
+      <div class="steps">
+        <div class="step">
+          <span class="step-num">01</span>
+          <div>
+            <p class="step-title">Upload your adapters</p>
+            <p>Wrap your simulator and plant executables in a lightweight adapter class. Works with native binaries, Python, Docker containers, or TCP servers.</p>
+          </div>
+        </div>
+        <div class="step">
+          <span class="step-num">02</span>
+          <div>
+            <p class="step-title">Define your trial</p>
+            <p>Select your scenario set and patient cohort. AXON automatically generates every scenario × patient combination as a parallel job.</p>
+          </div>
+        </div>
+        <div class="step">
+          <span class="step-num">03</span>
+          <div>
+            <p class="step-title">Run at scale</p>
+            <p>Jobs execute simultaneously across dedicated worker lanes. The dashboard shows live status: jobs running, time per simulation, cohort progress.</p>
+          </div>
+        </div>
+        <div class="step">
+          <span class="step-num">04</span>
+          <div>
+            <p class="step-title">Get your results</p>
+            <p>Every trial produces a structured results table, benchmark report, and a complete append-only audit log. The receipt, not just the claim.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- Features -->
+  <section class="features" id="features">
+    <div class="container">
+      <p class="section-label">Features</p>
+      <h2>Built for the full<br>simulation lifecycle.</h2>
+      <p class="section-sub">From first run to regulatory submission.</p>
+      <div class="grid">
+        <div class="card">
+          <p class="card-icon">[ PARALLEL ]</p>
+          <p class="card-title">Parallel Execution Lanes</p>
+          <p>Every job runs in an isolated worker lane. Scenarios and patients execute simultaneously. Wall-clock time scales with your infrastructure.</p>
+        </div>
+        <div class="card">
+          <p class="card-icon">[ AUDIT ]</p>
+          <p class="card-title">Append-Only Audit Trail</p>
+          <p>Every state transition is a new record. No updates, no deletes. Designed from day one for FDA and equivalent regulatory frameworks.</p>
+        </div>
+        <div class="card">
+          <p class="card-icon">[ ADAPTER ]</p>
+          <p class="card-title">Universal Adapter API</p>
+          <p>One interface for any executable: native binaries, Python scripts, Docker containers, or TCP processes. AXON speaks to all of them.</p>
+        </div>
+        <div class="card">
+          <p class="card-icon">[ REPORT ]</p>
+          <p class="card-title">Benchmark Reports</p>
+          <p>Per-task timing, per-patient results, cross-trial comparison. Structured output suitable for internal review or submission documentation.</p>
+        </div>
+        <div class="card">
+          <p class="card-icon">[ SWEEP ]</p>
+          <p class="card-title">Parameter Sweeps</p>
+          <p>Define a cohort once. Run every scenario against every patient in a single click. Compare controller versions across identical conditions.</p>
+        </div>
+        <div class="card">
+          <p class="card-icon">[ LIVE ]</p>
+          <p class="card-title">Live Dashboard</p>
+          <p>Real-time job status, lane utilization, and log streaming. Know exactly what's running, what finished, and what failed.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- Who it's for -->
+  <section class="audience">
+    <div class="container">
+      <p class="section-label">Who it's for</p>
+      <h2>If you run simulations at scale,<br>AXON is for you.</h2>
+      <div class="audience-grid">
+        <div class="audience-item">
+          <strong>Medical Devices</strong>
+          <span>Closed-loop controllers, virtual patient trials, pre-submission evidence</span>
+        </div>
+        <div class="audience-item">
+          <strong>Pharmacokinetics</strong>
+          <span>PK/PD models across virtual patient populations</span>
+        </div>
+        <div class="audience-item">
+          <strong>Computational Neuroscience</strong>
+          <span>Neural network simulations at population scale</span>
+        </div>
+        <div class="audience-item">
+          <strong>Climate & CFD</strong>
+          <span>Ensemble runs, parametric studies, long-horizon sweeps</span>
+        </div>
+        <div class="audience-item">
+          <strong>Quantitative Finance</strong>
+          <span>Monte Carlo simulations, scenario analysis, model validation</span>
+        </div>
+        <div class="audience-item">
+          <strong>Any Python Simulation</strong>
+          <span>If your simulation runs take too long or don't scale far enough, AXON is built for you</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Myelin -->
+  <section class="myelin" id="myelin">
+    <div class="container">
+      <div class="myelin-inner">
+        <div>
+          <p class="myelin-label">Start for free</p>
+          <h2>Begin with Myelin.<br>Scale with AXON.</h2>
+          <p>Myelin is a free VS Code extension that automatically transpiles your Python simulation code to optimized C modules when you save. No configuration, no rewrite.</p>
+          <p>It parses your code for hot loops, finds the minimum inputs needed for full branch coverage, transpiles to C, then runs both implementations side by side to prove correctness. You get the C module and the proof.</p>
+          <p>When your benchmark report shows the speedup and you want to run that faster code across a full patient cohort, AXON is one click away.</p>
+          <a href="#" class="btn-myelin">Install Myelin for VS Code</a>
+        </div>
+        <div class="code-block">
+          <span class="code-label before">your_sim.py</span>
+          <div class="code-body before">
+<span class="c-dim">def</span> <span class="c-text">run_ode(t, y, params):</span>
+<span class="c-text">    dydt = params[0] * y[0]</span>
+<span class="c-text">    ...</span>
+<span class="c-text">    return dydt</span>
+          </div>
+          <div class="code-arrow">save &darr;</div>
+          <span class="code-label after">.forge/run_ode.c — generated</span>
+          <div class="code-body after">
+<span class="c-green">// equivalence: PASSED (1024 cases)</span>
+<span class="c-green">// speedup:     8.3x</span>
+
+<span class="c-dim">double</span> <span class="c-text">run_ode(double t,</span>
+<span class="c-text">               double* y,</span>
+<span class="c-text">               double* params) {</span>
+<span class="c-text">    ...</span>
+<span class="c-text">}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Waitlist -->
+  <section class="waitlist" id="waitlist">
+    <div class="container">
+      <p class="section-label">Early Access</p>
+      <h2>Get early access.</h2>
+      <p class="section-sub">AXON is in private beta. Join the waitlist and we'll reach out when your spot is ready.</p>
+      <form name="waitlist" method="POST" data-netlify="true">
+        <input type="hidden" name="form-name" value="waitlist">
+        <div class="form-row">
+          <div class="field">
+            <label>Name <span class="optional">optional</span></label>
+            <input type="text" name="name" placeholder="Jane Smith">
+          </div>
+          <div class="field">
+            <label>Email <span style="color:var(--accent);font-size:0.65rem;">*</span></label>
+            <input type="email" name="email" placeholder="jane@lab.org" required>
+          </div>
+        </div>
+        <div class="field">
+          <label>What are you simulating? <span class="optional">optional</span></label>
+          <textarea name="simulation" placeholder="e.g. closed-loop insulin delivery across a virtual patient cohort"></textarea>
+        </div>
+        <div class="form-submit">
+          <button type="submit" class="btn btn-primary" style="width:100%">Request Access</button>
+        </div>
+        <p class="form-note">No spam. We'll only reach out when your spot is ready.</p>
+      </form>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="container">
+    <span>AXON &copy; 2026</span>
+    <span>Built for scientific computing at scale.</span>
+  </div>
+</footer>
+
+</body>
+</html>
