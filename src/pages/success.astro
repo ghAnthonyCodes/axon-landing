@@ -1,0 +1,35 @@
+---
+import Base from '../layouts/Base.astro';
+---
+<Base title="AXON: You're on the list">
+<style>
+  :root {
+    --bg:     #141414;
+    --accent: #57c4b8;
+    --text:   #d4d4d4;
+    --muted:  #6a6a6a;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 2rem;
+  }
+  .logo { font-family: monospace; font-size: 1rem; font-weight: 700; letter-spacing: 0.15em; color: var(--accent); text-transform: uppercase; text-decoration: none; margin-bottom: 3rem; display: block; }
+  h1 { font-size: 2rem; font-weight: 700; margin-bottom: 0.75rem; }
+  p { color: var(--muted); max-width: 420px; line-height: 1.6; margin-bottom: 2rem; }
+  a { color: var(--accent); text-decoration: none; font-size: 0.9rem; border-bottom: 1px solid rgba(87,196,184,0.3); padding-bottom: 0.1rem; }
+  a:hover { border-color: var(--accent); }
+</style>
+<a class="logo" href="/">AXON</a>
+<h1>You're on the list.</h1>
+<p>We'll reach out when your early access spot is ready. In the meantime, keep an eye on your inbox.</p>
+<a href="/">Back to runaxon.com</a>
+</Base>

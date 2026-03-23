@@ -1,0 +1,29 @@
+{
+  "name": "axon-landing",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ghAnthonyCodes/axon-landing.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/ghAnthonyCodes/axon-landing/issues"
+  },
+  "homepage": "https://github.com/ghAnthonyCodes/axon-landing#readme",
+  "dependencies": {
+    "@astrojs/mdx": "^5.0.2",
+    "astro": "^6.0.8",
+    "rehype-katex": "^7.0.1",
+    "remark-math": "^6.0.0"
+  }
+}

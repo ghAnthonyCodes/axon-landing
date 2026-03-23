@@ -1,0 +1,96 @@
+---
+import Base from './Base.astro';
+const { frontmatter } = Astro.props;
+---
+<Base title={frontmatter.title} description={frontmatter.description} katex={true}>
+<style>
+  :root {
+    --bg:      #141414;
+    --surface: #1e1e1e;
+    --accent:  #57c4b8;
+    --text:    #d4d4d4;
+    --muted:   #6a6a6a;
+    --border:  rgba(212,212,212,0.1);
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 16px; scroll-behavior: smooth; }
+  body { background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, sans-serif; line-height: 1.6; }
+
+  nav {
+    border-bottom: 1px solid var(--border);
+    padding: 1.25rem 2rem;
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    max-width: 860px;
+    margin: 0 auto;
+  }
+  /* nav is inside body so we need full-width bar */
+  body > nav { max-width: unset; padding: 1.25rem 2rem; }
+  .nav-inner { max-width: 860px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; width: 100%; }
+  .logo { font-family: monospace; font-size: 1.1rem; font-weight: 700; letter-spacing: 0.15em; color: var(--accent); text-transform: uppercase; text-decoration: none; }
+  .nav-right a { color: var(--muted); text-decoration: none; font-size: 0.875rem; margin-left: 2rem; transition: color 0.2s; }
+  .nav-right a:hover { color: var(--text); }
+
+  main { max-width: 680px; margin: 0 auto; padding: 4rem 2rem 6rem; }
+
+  .post-meta { margin-bottom: 2.5rem; }
+  .post-label { font-family: monospace; font-size: 0.7rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent); margin-bottom: 1rem; }
+  h1 { font-size: clamp(1.75rem, 4vw, 2.5rem); font-weight: 700; letter-spacing: -0.02em; color: #f0f0f0; line-height: 1.15; margin-bottom: 0.75rem; }
+  .post-date { color: var(--muted); font-size: 0.8rem; }
+
+  .prose { color: var(--text); }
+  .prose h2 { font-size: 1.4rem; font-weight: 700; color: #f0f0f0; margin: 2.5rem 0 0.75rem; letter-spacing: -0.01em; }
+  .prose h3 { font-size: 1.1rem; font-weight: 600; color: #f0f0f0; margin: 2rem 0 0.5rem; }
+  .prose p { margin-bottom: 1.25rem; font-size: 0.975rem; line-height: 1.75; }
+  .prose a { color: var(--accent); text-decoration: none; border-bottom: 1px solid rgba(87,196,184,0.3); }
+  .prose a:hover { border-color: var(--accent); }
+  .prose code { font-family: monospace; font-size: 0.85em; background: var(--surface); padding: 0.15em 0.4em; color: var(--accent); }
+  .prose pre { background: var(--surface); border: 1px solid var(--border); padding: 1.25rem; overflow-x: auto; margin-bottom: 1.5rem; }
+  .prose pre code { background: none; padding: 0; color: var(--text); font-size: 0.82rem; line-height: 1.7; }
+  .prose blockquote { border-left: 2px solid var(--accent); padding-left: 1rem; color: var(--muted); margin-bottom: 1.25rem; }
+  .prose ul, .prose ol { padding-left: 1.5rem; margin-bottom: 1.25rem; }
+  .prose li { margin-bottom: 0.4rem; font-size: 0.975rem; line-height: 1.75; }
+  .prose hr { border: none; border-top: 1px solid var(--border); margin: 2.5rem 0; }
+
+  /* KaTeX */
+  .prose .katex-display { overflow-x: auto; padding: 0.5rem 0; margin-bottom: 1.25rem; }
+
+  footer { border-top: 1px solid var(--border); padding: 2rem; color: var(--muted); font-size: 0.78rem; }
+  footer .inner { max-width: 860px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; }
+  footer a { color: var(--muted); text-decoration: none; }
+  footer a:hover { color: var(--accent); }
+</style>
+
+<nav>
+  <div class="nav-inner">
+    <a class="logo" href="/">AXON</a>
+    <div class="nav-right">
+      <a href="/blog">Blog</a>
+      <a href="/#waitlist">Join Waitlist</a>
+    </div>
+  </div>
+</nav>
+
+<main>
+  <div class="post-meta">
+    <p class="post-label">Technical Article</p>
+    <h1>{frontmatter.title}</h1>
+    <p class="post-date">{new Date(frontmatter.date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+  </div>
+  <div class="prose">
+    <slot />
+  </div>
+</main>
+
+<footer>
+  <div class="inner">
+    <span>AXON &copy; 2026</span>
+    <a href="/">runaxon.com</a>
+  </div>
+</footer>
+</Base>

@@ -1,0 +1,77 @@
+---
+import Base from '../../layouts/Base.astro';
+
+const postModules = import.meta.glob('./*.mdx', { eager: true });
+const posts = Object.values(postModules) as any[];
+posts.sort((a, b) => new Date(b.frontmatter.date).valueOf() - new Date(a.frontmatter.date).valueOf());
+---
+<Base title="Blog — AXON" description="Technical articles on simulation, optimization, and scientific computing from the AXON team.">
+<style>
+  :root {
+    --bg:      #141414;
+    --surface: #1e1e1e;
+    --accent:  #57c4b8;
+    --text:    #d4d4d4;
+    --muted:   #6a6a6a;
+    --border:  rgba(212,212,212,0.1);
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 16px; }
+  body { background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, sans-serif; line-height: 1.6; }
+  nav { border-bottom: 1px solid var(--border); padding: 1.25rem 2rem; position: sticky; top: 0; background: var(--bg); z-index: 10; }
+  .nav-inner { max-width: 860px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; }
+  .logo { font-family: monospace; font-size: 1.1rem; font-weight: 700; letter-spacing: 0.15em; color: var(--accent); text-transform: uppercase; text-decoration: none; }
+  .nav-right a { color: var(--muted); text-decoration: none; font-size: 0.875rem; margin-left: 2rem; transition: color 0.2s; }
+  .nav-right a:hover { color: var(--text); }
+  main { max-width: 860px; margin: 0 auto; padding: 4rem 2rem 6rem; }
+  .page-label { font-family: monospace; font-size: 0.7rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent); margin-bottom: 1rem; }
+  h1 { font-size: 2rem; font-weight: 700; color: #f0f0f0; letter-spacing: -0.02em; margin-bottom: 0.5rem; }
+  .page-sub { color: var(--muted); font-size: 0.9rem; margin-bottom: 3rem; }
+  .post-list { display: flex; flex-direction: column; gap: 0; }
+  .post-item { padding: 1.5rem 0; border-bottom: 1px solid var(--border); display: grid; grid-template-columns: 1fr auto; gap: 1rem; align-items: start; }
+  .post-item:first-child { border-top: 1px solid var(--border); }
+  .post-title { font-weight: 600; color: #f0f0f0; font-size: 1rem; margin-bottom: 0.3rem; }
+  .post-title a { color: inherit; text-decoration: none; }
+  .post-title a:hover { color: var(--accent); }
+  .post-desc { color: var(--muted); font-size: 0.875rem; line-height: 1.6; }
+  .post-date { font-family: monospace; font-size: 0.75rem; color: var(--muted); white-space: nowrap; padding-top: 0.2rem; }
+  footer { border-top: 1px solid var(--border); padding: 2rem; color: var(--muted); font-size: 0.78rem; }
+  .footer-inner { max-width: 860px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; }
+  footer a { color: var(--muted); text-decoration: none; }
+  footer a:hover { color: var(--accent); }
+</style>
+
+<nav>
+  <div class="nav-inner">
+    <a class="logo" href="/">AXON</a>
+    <div class="nav-right">
+      <a href="/blog">Blog</a>
+      <a href="/#waitlist">Join Waitlist</a>
+    </div>
+  </div>
+</nav>
+
+<main>
+  <p class="page-label">Technical Articles</p>
+  <h1>Blog</h1>
+  <p class="page-sub">Simulation, optimization, and scientific computing.</p>
+  <div class="post-list">
+    {posts.map(post => (
+      <div class="post-item">
+        <div>
+          <p class="post-title"><a href={post.url}>{post.frontmatter.title}</a></p>
+          <p class="post-desc">{post.frontmatter.description}</p>
+        </div>
+        <span class="post-date">{new Date(post.frontmatter.date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
+      </div>
+    ))}
+  </div>
+</main>
+
+<footer>
+  <div class="footer-inner">
+    <span>AXON &copy; 2026</span>
+    <a href="/">runaxon.com</a>
+  </div>
+</footer>
+</Base>
