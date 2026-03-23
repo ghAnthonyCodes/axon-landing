@@ -1,5 +1,0 @@
-[[redirects]]
-  from = "/*.md"
-  to = "/index.html"
-  status = 404
-  force = true
