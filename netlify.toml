@@ -1,4 +1,5 @@
 [[redirects]]
   from = "/*.md"
-  to = "/404"
+  to = "/index.html"
   status = 404
+  force = true
