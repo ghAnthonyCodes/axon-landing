@@ -275,6 +275,8 @@
     transition: opacity 0.2s;
   }
   .btn-myelin:hover { opacity: 0.88; }
+  .btn-myelin-disabled { background: #2a2a2a; color: #6a6a6a; cursor: default; }
+  .btn-myelin-disabled:hover { opacity: 1; }
   .code-block {
     font-family: monospace;
     font-size: 0.78rem;
@@ -325,7 +327,7 @@
 
 <nav>
   <div class="container">
-    <a class="logo" href="#">AXON</a>
+    <a class="logo" href="/">AXON</a>
     <div class="nav-links">
       <a href="#how-it-works">How it works</a>
       <a href="#myelin">Myelin</a>
@@ -479,7 +481,7 @@
           <p>Myelin is a free VS Code extension that automatically transpiles your Python simulation code to optimized C modules when you save. No configuration, no rewrite.</p>
           <p>It parses your code for hot loops, finds the minimum inputs needed for full branch coverage, transpiles to C, then runs both implementations side by side to prove correctness. You get the C module and the proof.</p>
           <p>When your benchmark report shows the speedup and you want to run that faster code across a full patient cohort, AXON is one click away.</p>
-          <a href="#" class="btn-myelin">Install Myelin for VS Code</a>
+          <span class="btn-myelin btn-myelin-disabled">Myelin — coming soon</span>
         </div>
         <div class="code-block">
           <span class="code-label before">your_sim.py</span>
