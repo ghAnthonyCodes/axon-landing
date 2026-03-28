@@ -23,7 +23,7 @@ const { title, description = 'Automatic, scalable simulation infrastructure for 
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content={title}>
 <meta name="twitter:description" content={description}>
-<!-- Google tag (gtag.js) -->
+{!import.meta.env.DEV && <>
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-NHVYE07Z54" is:inline></script>
 <script is:inline>
   window.dataLayer = window.dataLayer || [];
@@ -31,6 +31,7 @@ const { title, description = 'Automatic, scalable simulation infrastructure for 
   gtag('js', new Date());
   gtag('config', 'G-NHVYE07Z54');
 </script>
+</>}
 {katex && <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">}
 </head>
 <body>

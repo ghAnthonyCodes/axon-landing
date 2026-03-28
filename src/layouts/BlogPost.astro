@@ -50,8 +50,13 @@ const { frontmatter } = Astro.props;
   .prose a { color: var(--accent); text-decoration: none; border-bottom: 1px solid rgba(87,196,184,0.3); }
   .prose a:hover { border-color: var(--accent); }
   .prose code { font-family: monospace; font-size: 0.85em; background: var(--surface); padding: 0.15em 0.4em; color: var(--accent); }
-  .prose pre { background: var(--surface); border: 1px solid var(--border); padding: 1.25rem; overflow-x: auto; margin-bottom: 1.5rem; }
-  .prose pre code { background: none; padding: 0; color: var(--text); font-size: 0.82rem; line-height: 1.7; }
+  .prose pre { background: var(--surface) !important; border: 1px solid var(--border); padding: 1.25rem !important; overflow-x: auto; margin-bottom: 1.5rem; font-size: 12px !important; }
+  .prose pre code { background: none; padding: 0; color: var(--text); font-size: 12px !important; line-height: 1.7; }
+  .prose .astro-code { font-size: 12px !important; }
+  .prose .astro-code * { font-size: 12px !important; }
+</style>
+<style is:global>
+  .prose .astro-code, .prose .astro-code span { font-size: 12px !important; }
   .prose blockquote { border-left: 2px solid var(--accent); padding-left: 1rem; color: var(--muted); margin-bottom: 1.25rem; }
   .prose ul, .prose ol { padding-left: 1.5rem; margin-bottom: 1.25rem; }
   .prose li { margin-bottom: 0.4rem; font-size: 0.975rem; line-height: 1.75; }
