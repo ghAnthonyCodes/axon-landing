@@ -18,7 +18,7 @@ nav .container { display: flex; align-items: center; justify-content: space-betw
 .nav-links a:hover { color: var(--text); }
 .nav-links a.cta { color: var(--accent); border: 1px solid var(--accent); padding: 0.3rem 0.9rem; }
 .nav-links a.cta:hover { background: var(--accent); color: var(--btn-text); }
-@media (max-width: 600px) { .nav-links a:not(.cta) { display: none; } .nav-links a.cta { margin-left: 0; } }
+@media (max-width: 600px) { .nav-links a:not([href="/blog"]) { display: none; } }
 .hero { padding: 7rem 0 6rem; text-align: center; }
 .eyebrow { font-family: monospace; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.75rem; }
 h1 { font-size: clamp(2.25rem, 5vw, 3.5rem); font-weight: 700; line-height: 1.1; letter-spacing: -0.02em; margin-bottom: 1.5rem; color: #f0f0f0; }

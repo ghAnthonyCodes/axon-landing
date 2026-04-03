@@ -1,0 +1,689 @@
+---
+layout: '../../layouts/BlogPost.astro'
+title: "Cython Isn't Magic. Here's What Is."
+description: "We built a propofol anesthesia simulator in Python, compiled it with Cython, and only got a 6% speedup. Here's why, and what actually got us 308× speedup."
+date: "2026-04-03"
+thumbnail: "/images/blog/grid_search.png"
+---
+*This is a draft pre-print shared for early feedback. The code and conclusions are complete but the writing is still being refined. Comments welcome at [anthony@runaxon.com](mailto:anthony@runaxon.com).*
+
+*Spoilers... it's **actual** C, but still easier to implement than you'd think*
+
+I'm a pretty normal guy. When my Python is slow, I reach for Cython. 
+But Cython isn't magic. I'll show why, then explain how I transformed a 
+185 second Python script into a 0.6 second executable, without changing any logic, only doing some **"C stuff"**.
+
+Before we accelerate code, we need something to accelerate. 
+
+I figured we would make it something cool: **Anesthesia Control**
+
+Which means:
+    1. Modeling Propofol, the drug that puts you to sleep during surgery
+    2. Creating a 200-patient virtual cohort (so the drug affects each patient a little differently)
+    3. Creating a PID controller and running a grid search that finds the best parameters for controlling the full cohort
+
+Let's get started.
+
+## Modeling Propofol - The Schnider Model
+
+Propofol is well modeled via a standard 3-compartment Pk/Pd model.
+If you haven't learned PK/PD modeling, don't fret. They appear complex, 
+but once you break them down into their components, you'll see that the
+diagram matches the equations in a really intuitive way.
+
+Here is the full model:
+
+<div>
+<svg viewBox="0 0 640 320" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:640px;display:block;margin:2rem auto;font-family:monospace;">
+  <rect x="20" y="40" width="160" height="64" rx="2" fill="#1e1e1e" stroke="#57c4b8" stroke-width="1.5"/>
+  <text x="100" y="68" text-anchor="middle" fill="#f0f0f0" font-size="13" font-weight="600">x2</text>
+  <text x="100" y="88" text-anchor="middle" fill="#6a6a6a" font-size="11">Rapid Peripheral</text>
+  <rect x="240" y="40" width="160" height="64" rx="2" fill="#1e1e1e" stroke="#57c4b8" stroke-width="1.5"/>
+  <text x="320" y="68" text-anchor="middle" fill="#f0f0f0" font-size="13" font-weight="600">x1</text>
+  <text x="320" y="88" text-anchor="middle" fill="#6a6a6a" font-size="11">Central</text>
+  <rect x="460" y="40" width="160" height="64" rx="2" fill="#1e1e1e" stroke="#57c4b8" stroke-width="1.5"/>
+  <text x="540" y="68" text-anchor="middle" fill="#f0f0f0" font-size="13" font-weight="600">x3</text>
+  <text x="540" y="88" text-anchor="middle" fill="#6a6a6a" font-size="11">Slow Peripheral</text>
+  <line x1="240" y1="65" x2="180" y2="65" stroke="#57c4b8" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="180" y1="78" x2="240" y2="78" stroke="#57c4b8" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="210" y="58" text-anchor="middle" fill="#57c4b8" font-size="10">k12</text>
+  <text x="210" y="94" text-anchor="middle" fill="#57c4b8" font-size="10">k21</text>
+  <line x1="400" y1="65" x2="460" y2="65" stroke="#57c4b8" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="460" y1="78" x2="400" y2="78" stroke="#57c4b8" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="430" y="58" text-anchor="middle" fill="#57c4b8" font-size="10">k13</text>
+  <text x="430" y="94" text-anchor="middle" fill="#57c4b8" font-size="10">k31</text>
+  <line x1="320" y1="104" x2="320" y2="155" stroke="#6a6a6a" stroke-width="1.5" marker-end="url(#arr-muted)"/>
+  <text x="332" y="138" fill="#6a6a6a" font-size="10">k10</text>
+  <line x1="320" y1="10" x2="320" y2="38" stroke="#57c4b8" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arr)"/>
+  <text x="332" y="28" fill="#57c4b8" font-size="10">u(t)</text>
+  <rect x="240" y="210" width="160" height="64" rx="2" fill="#1e1e1e" stroke="rgba(87,196,184,0.4)" stroke-width="1.5" stroke-dasharray="6 3"/>
+  <text x="320" y="238" text-anchor="middle" fill="#f0f0f0" font-size="13" font-weight="600">Ce</text>
+  <text x="320" y="258" text-anchor="middle" fill="#6a6a6a" font-size="11">Effect Site</text>
+  <line x1="320" y1="168" x2="320" y2="208" stroke="rgba(87,196,184,0.5)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arr-dim)"/>
+  <text x="332" y="195" fill="rgba(87,196,184,0.6)" font-size="10">ke0</text>
+  <text x="320" y="300" text-anchor="middle" fill="#6a6a6a" font-size="10">↓ Hill equation → BIS</text>
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#57c4b8"/>
+    </marker>
+    <marker id="arr-muted" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#6a6a6a"/>
+    </marker>
+    <marker id="arr-dim" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="rgba(87,196,184,0.5)"/>
+    </marker>
+  </defs>
+</svg>
+<p style="font-size:0.8rem;color:#6a6a6a;margin-top:0.5rem;">The full Schnider model. x1 (central), x2 (rapid peripheral), x3 (slow peripheral) exchange drug via the teal arrows. k10 (grey) is elimination. u(t) is the infusion rate entering x1. Ce (dashed border) is the effect site, linked to x1 via ke0. BIS is computed from Ce via the Hill equation.</p>
+</div>
+
+Each arrow means something exact. The rate constant on an arrow tells you what fraction of the source compartment moves per unit time.
+
+<div>
+<svg viewBox="0 0 460 140" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:460px;display:block;margin:2rem auto;font-family:monospace;">
+  <defs><marker id="arr2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#57c4b8"/></marker></defs>
+  <line x1="30" y1="60" x2="88" y2="60" stroke="#57c4b8" stroke-width="1.5" marker-end="url(#arr2)"/>
+  <text x="59" y="50" text-anchor="middle" fill="#57c4b8" font-size="11">u(t)</text>
+  <rect x="90" y="28" width="110" height="64" rx="2" fill="#1e1e1e" stroke="#57c4b8" stroke-width="1.5"/>
+  <text x="145" y="56" text-anchor="middle" fill="#f0f0f0" font-size="14" font-weight="600">A</text>
+  <text x="145" y="76" text-anchor="middle" fill="#6a6a6a" font-size="11">amount: a</text>
+  <line x1="200" y1="60" x2="258" y2="60" stroke="#57c4b8" stroke-width="1.5" marker-end="url(#arr2)"/>
+  <text x="229" y="50" text-anchor="middle" fill="#57c4b8" font-size="11">k_ab</text>
+  <rect x="260" y="28" width="110" height="64" rx="2" fill="#1e1e1e" stroke="#57c4b8" stroke-width="1.5"/>
+  <text x="315" y="56" text-anchor="middle" fill="#f0f0f0" font-size="14" font-weight="600">B</text>
+  <text x="315" y="76" text-anchor="middle" fill="#6a6a6a" font-size="11">amount: b</text>
+  <line x1="315" y1="92" x2="315" y2="128" stroke="#6a6a6a" stroke-width="1.5" marker-end="url(#arr2)"/>
+  <text x="327" y="116" fill="#6a6a6a" font-size="11">k_out</text>
+</svg>
+<p style="font-size:0.8rem;color:#6a6a6a;margin-top:0.5rem;">A minimal two-compartment example. u(t) enters A (e.g. a drug infusion). k_ab transfers drug from A to B at a rate proportional to a. k_out (grey) eliminates drug from B. Each arrow tail subtracts from its source; each arrowhead adds to its destination. The ODEs follow directly from the diagram.</p>
+</div>
+
+From this diagram you can read off the ODEs directly.
+Each arrow ***head*** adds a positive term to the compartment it points into;
+each arrow ***tail*** adds a negative term to the compartment it leaves.
+
+Just like that, we have our ODEs:
+
+$$\frac{da}{dt} = u(t) - k_{ab} \cdot a$$
+
+$$\frac{db}{dt} = k_{ab} \cdot a - k_{out} \cdot b$$
+
+The math and the diagram are the same.
+
+### The Full Model - After Slight Factoring
+Now that we know how to interpret Pk/Pd diagrams, we can construct the full model.
+
+$$\frac{dx_1}{dt} = u(t) + k_{21} \cdot x_2 + k_{31} \cdot x_3 - x_1 \cdot (k_{13} + k_{12}) - k_{10} \cdot x_1$$
+
+$$\frac{dx_2}{dt} = k_{12} \cdot x_1 - k_{21} \cdot x_2$$
+
+$$\frac{dx_3}{dt} = k_{13} \cdot x_1 - k_{31} \cdot x_3$$
+
+### The Effect-Site $C_e$
+$C_e$ is a special virtual compartment that doesn't track drug amount but rather its effect on the brain. The lag between plasma concentration and brain effect is captured by the rate constant $k_{e0}$:
+
+$$\frac{dC_e}{dt} = k_{e0} \cdot (C_1 - C_e)$$
+
+$C_e$ equilibrates toward the plasma concentration $C_1$. When they are equal, net flux is zero.
+
+### The $BIS$ Response
+This would be our sensor reading in a control algorithm.
+It is a processed EEG signal scaled from 0 to 100 that quantifies the depth of the anesthesia, that
+scales from 0 (no brain activity) to 100 (fully awake). The 40-60 range is the target range for general
+anesthesia. The Hill equation is used to map $C_e$ to $BIS$.
+
+$$BIS = E_0 - E_{max} \frac{C_e^\gamma}{C_e^\gamma + EC_{50}^\gamma}$$
+
+Where
+    - $E_0$ is baseline BIS (awake, ~93)
+    - $E_{max}$ is maximum drug effect
+    - $E_{50}$ is the $C_e$ at half-maximum effect
+    - $\gamma$ is the Hill coefficient (steepness of the curve)
+
+### Infusion Rate $u(t)$
+
+The amount of medication entering per unit time $t$, in [ug / s].
+
+## Python Implementation
+
+We represent the patient state as a tuple of three drug amounts and one effect-site concentration.
+Before surgery, there is no propofol in the body, so all four states start at zero:
+
+```python
+# Initial state: drug-naive patient
+STATE0: tuple = (0.0, 0.0, 0.0, 0.0)
+```
+
+The state layout is:
+
+| Index | Variable | Description | Units |
+|-------|----------|-------------|-------|
+| 0 | x1 | Central compartment | µg |
+| 1 | x2 | Fast peripheral compartment | µg |
+| 2 | x3 | Slow peripheral compartment | µg |
+| 3 | Ce | Effect-site concentration | µg/mL |
+
+The first three states track drug *amount*. Plasma concentration can be recovered via $C_p = x_1 / (V_1 \times 1000)$.
+The effect-site is stored as concentration directly, and has negligible volume, so there is no meaningful *"amount"* to track.
+
+The full implementation is available on [GitHub](https://github.com/runaxon/axon-plant-schnider). In code, the ODEs look like this:
+
+```python
+def derivatives(state: tuple, inputs: tuple, params: tuple) -> tuple:
+    (u_t, ) = inputs
+    x1, x2, x3, Ce = state
+    v1, v2, v3, k10, k12, k13, k21, k31, ke0 = params[:9]
+
+    C1 = x1 / (v1 * 1000.0)   # central plasma concentration (µg/mL)
+
+    dx1_dt = u_t - (k10 + k12 + k13) * x1 + k21 * x2 + k31 * x3
+    dx2_dt = k12 * x1 - k21 * x2
+    dx3_dt = k13 * x1 - k31 * x3
+    dCe_dt = ke0 * (C1 - Ce)   # both sides µg/mL
+
+    return (dx1_dt, dx2_dt, dx3_dt, dCe_dt)
+```
+
+Running a demo with a single reference patient (40 y/o male, 70 kg, 170 cm) using a standard propofol infusion schedule (initial bolus -> maintenance period -> washout) produces the following:
+
+<div>
+<img src="/images/blog/schnider_demo.png" alt="Schnider Propofol PK/PD simulation showing plasma concentration, effect-site concentration, BIS, and infusion rate over 60 minutes" style="width:100%;border:1px solid rgba(212,212,212,0.1);" />
+<p style="font-size:0.8rem;color:#6a6a6a;margin-top:0.5rem;">Single patient simulation (40 y/o male, 70 kg). Top panel: Cp spikes during the induction bolus; Ce lags behind, via k_e0. BIS falls as Ce rises, reaching the target range (40–60) within about 2 minutes. The large induction bolus gets the patient through the uncomfortable in-between phase quickly. Bottom panel: infusion rate drops to the lower maintenance dose once BIS is on target, then stops at 30 min for washout.</p>
+</div>
+
+A one-patient simulation is pratically instant, hardly interesting for a python acceleration case.
+Let's generate a cohort:
+
+## Virtual Cohort
+
+We use Latin Hypercube Sampling (LHS) to create a set of patients that span the realistic demographic range.
+The Schnider model parameters are calculated from patient's age, weight, height, and sex.
+LHS works like this:
+    1. Cut ages 18 to 80 into 200 equal slices, uniformly sample 1 age within each slice, for a total of 200 and make it a vector, call this vector $\vec{a}$
+    2. Cut weights 50 to 120 kg into 200 equal slices and uniformly sample 1 weight within each slice to make vector $\vec{w}$
+    3. Cut heights 150cm to 195cm into 200 equal slices and uniformly sample 1 height within each slice to make vector $\vec{h}$
+    4. For sex, just create a vector with 100 males and 100 females, $\vec{g}$
+    2. Shuffle each vector's values: $\text{shuffle}(\vec{a})$, $\text{shuffle}(\vec{w})$, $\text{shuffle}(\vec{h})$, $\text{shuffle}(\vec{g})$
+    3. Create patients: 
+        - $\text{p}_1 = {\{a_0, w_0, h_0, g_0\}}$
+        - $\text{p}_2 = {\{a_1, w_1, h_1, g_1\}}$
+        - ... 
+        - $\text{p}_{200} = {\{a_{199}, w_{199}, h_{199}, g_{199}\}}$
+
+Cohort can be saved to and loaded from JSON files.
+
+```bash
+python eval_cohort.py --generate --n 200 --seed 99 --out cohorts/n200_seed99.json
+```
+
+To evaluate the cohort under a given infusion schedule:
+
+```bash
+python eval_cohort.py --cohort cohorts/n200_seed99.json
+```
+
+The spread in Ce/BIS response varies, which leads us to our control solution.
+
+<div>
+<img src="/images/blog/cohort_eval.png" alt="Cohort evaluation showing BIS and effect-site concentration spread across 200 virtual patients under open-loop infusion" style="width:100%;border:1px solid rgba(212,212,212,0.1);" />
+<p style="font-size:0.8rem;color:#6a6a6a;margin-top:0.5rem;">Each faint line is one patient. The shaded band is P10–P90. The spread in BIS nadir (P10: 15.7, median: 18.1, P90: 20.9) is entirely due to PK variability. The same infusion schedule produces meaningfully different anesthetic depth across the cohort. A fixed open-loop schedule cannot compensate for this. A controller must.</p>
+</div>
+
+## The PID Controller
+
+A PID controller computes an output (here, the infusion rate) from three terms that each respond to the error signal differently. In our case the error is defined as:
+
+$$e(t) = BIS(t) - BIS_{target}$$
+
+**Proportional** responds to the current error.
+
+$$P = k_p \cdot e(t)$$
+
+**Integral** responds to accumulated error over time. 
+
+$$I = k_i \int_0^t e(\tau)\, d\tau$$
+
+**Derivative** responds to the rate of change of the measurement. 
+
+$$D = k_d \frac{d\, BIS(t)}{dt}$$
+
+The full controller output is:
+
+$$u(t) = k_p \cdot e(t) + k_i \int_0^t e(\tau)\, d\tau + k_d \frac{d\, BIS(t)}{dt}$$
+
+The controller is tuned by choosing three gains: $(k_p, k_i, k_d)$.
+
+Finding a single set of gains to handle the full cohort is starting to sound like a 
+python script worthy of acceleration. In order to automatically select the best gains,
+we need a way to *score* a candidate set of gains.
+
+## Optimization Problem
+
+Recall that BIS ranges from 0 (no brain activity) to 100 (very very awake).
+The clinical target for general anesthesia is 40-60, with 45-50 being the typical maintenance goal, deep enough to ensure unconsciousness, shallow enough to avoid overly suppressing brain activity. We use $BIS_{target} = 50$.
+
+We want to find PID gains $(K_p, K_i, K_d)$ that minimize BIS tracking error across the full cohort. The loss has two components.
+
+**Maintenance ISE** is computed over the maintenance window only, from $t_{induced} = 2$ min (when the patient should be under) through $t_{maintenance} = 30$ min (when the infusion stops). Washout is excluded: BIS rising during recovery is expected, not a controller failure.
+
+$$ISE_n = \int_{t_{induced}}^{t_{maintenance}} \left( BIS_n(t) - BIS_{target} \right)^2 dt$$
+
+**Induction penalty** enforces that BIS crosses below 60 within 2 minutes, the clinical standard for propofol induction. The uncomfortable twilight zone (BIS 60–80) should be transitioned through quickly, not lingered in. If BIS has not fallen below 60 by $t_{induced}$, a fixed penalty $\lambda$ is added regardless of the rest of the trajectory:
+
+$$P_n = \lambda \cdot \mathbb{1}\left[ \min_{t \leq t_{induced}} BIS_n(t) \geq 60 \right]$$
+
+The full cohort loss is the mean over all $N$ patients:
+
+$$L(K_p, K_i, K_d) = \frac{1}{N} \sum_{n=1}^{N} \left( ISE_n + P_n \right)$$
+
+The ISE component is normalized by a worst-case reference: the ISE a controller that held BIS at zero for the entire maintenance window would produce:
+
+$$ISE_{ref} = BIS_{target}^2 \cdot (t_{maintenance} - t_{induced}) = 50^2 \times 28 = 70{,}000$$
+
+Dividing $ISE_n$ by $ISE_{ref}$ puts $ISE_n$ within the range $[0, 1]$ regardless of window length, cohort size, or step size, making scores directly comparable across experiments.
+The induction penalty is scaled by the same reference ($\tilde{\lambda} = \lambda / ISE_{ref} \approx 7.14$), so a single failed induction adds roughly 7× worst-case tracking error to that patient's score.
+
+Final scoring function parameters:
+    - $BIS_{target} = 50$
+    - $t_{induction} = 2$ min
+    - $t_{maintenance} = 30$ min
+    - $\lambda = 500{,}000$.
+
+We chose ISE for two reasons. First, squaring the error penalizes large deviations disproportionately: a brief excursion to BIS 20 is far worse than a sustained offset of 5, and ISE reflects that. Second, it implicitly penalizes oscillation: a controller that hunts around the target accumulates more squared error than one that settles cleanly, even if the mean error is similar.
+
+Averaging over the cohort forces the optimizer to find gains that are robust across the demographic range rather than tuned to a single patient's PK parameters. The open-loop baseline (our fixed induction + maintenance schedule with no feedback) scores **0.10** on the normalized cohort loss. That is the number the PID controller needs to beat.
+
+### Grid Search to Find PID Gains
+
+We search over a uniform grid of 8 values per gain parameter, giving $8^3 = 512$ candidate controllers.
+Each candidate is evaluated against all 200 patients. I chose the centers with a little hand-tuning magic,
+which exists in all practical controller designs...
+
+```python
+N = 8
+KP_CENTER = 4000
+KI_CENTER = 400
+KD_CENTER = 1600
+KP_VALUES = [2 * KP_CENTER / N * x for x in range(1, N + 1)]
+KI_VALUES = [2 * KI_CENTER / N * x for x in range(1, N + 1)]
+KD_VALUES = [2 * KD_CENTER / N * x for x in range(1, N + 1)]
+```
+
+512 candidates × 200 patients = **102,400 simulations**. In Python, this takes **185 seconds**. The best gains found:
+
+| Gain | Value |
+|------|-------|
+| $k_p$ | 4000 |
+| $k_i$ | 600 |
+| $k_d$ | 2000 |
+
+Normalized cohort loss: **1.79 × 10⁻⁵**, a **5,600× improvement** over the open-loop baseline of ~0.10.
+
+<div>
+<img src="/images/blog/grid_search.png" alt="3D scatter plot of PID gain search colored by normalized cohort loss" style="width:100%;border:1px solid rgba(212,212,212,0.1);" />
+<p style="font-size:0.8rem;color:#6a6a6a;margin-top:0.5rem;">Each point is one candidate controller (kp, ki, kd). Color encodes log₁₀(loss), brighter is better (lower loss). Grey points failed the induction criterion (BIS did not cross below 60 within 2 minutes). The teal star (sorry it is hard to see because it is behind other points) marks the best gains found: kp=4000, ki=600, kd=2000.</p>
+</div>
+
+Let's look at the results of our tuned PID gains by running our PID
+in closed-loop against the full cohort:
+
+```bash
+python eval_cohort.py --cohort cohorts/n200_seed99.json --pid 4000,600,2000
+```
+
+<div>
+<img src="/images/blog/cohort_eval_pid.png" alt="Closed-loop PID cohort evaluation: BIS held within 0.7 points of target across all 200 patients" style="width:100%;border:1px solid rgba(212,212,212,0.1);" />
+<p style="font-size:0.8rem;color:#6a6a6a;margin-top:0.5rem;">Same 200 patients, same format as the open-loop plot above, now with the optimized PID running. All patients held within 0.7 BIS points of target (median nadir 49.8, P10–P90: 49.3–49.9). The 3.5× spread in metabolic clearance is no longer visible in the BIS trajectory.</p>
+</div>
+
+185 seconds is the cost of a single grid pass on a single cohort. 
+Is this run-time really worth accelerating? 
+Well for an FDA-grade validation you may want to repeat this across thousands of independently sampled cohorts to demonstrate robustness in optimal PID gains to sampling variability.
+Ideally, you'd show the 95% confidence intervals of your optimal PID gains using this process.
+For 10,000 cohort samples with a 185s process each is a 21 day simulation. Ok, now that is worth accelerating.
+
+## First Instinct: Compile It
+
+The grid search runs 102,400 simulations. Each simulation runs ~600 RK4 steps. Each RK4 step calls **`derivatives()`** four times. That is roughly **245 million calls** to **`derivatives()`**. The obvious move is Cython.
+
+```python
+# cython_ext/setup_naive.py
+ext_modules=cythonize('physio/schnider.py', compiler_directives={'language_level': '3'}, annotate=True)
+```
+
+```bash
+python cython_ext/setup_naive.py build_ext --inplace
+```
+
+| | Time | Speedup |
+|---|---|---|
+| Pure Python | 184.3s | 1.0× |
+| Naive Cython | 174.6s | 1.06× |
+
+Wow, 6% speedup. Without type annotations, Cython is just wrapping Python. Here is why.
+
+When Cython compiles a Python function without type information, every variable is still a Python object. 
+Every arithmetic operation still calls into the CPython runtime: look up the `__add__` method, check the type, unbox the value, do the math, re-box the result, handle reference counting.
+The `.pyx` file generates C code, but that C code is calling `PyFloat_AS_DOUBLE()`, `PyNumber_Add()`, and `Py_DECREF()` on every line.
+
+It is fast C that does slow Python things.
+
+<div>
+<img src="/images/blog/cython-annoted-act1.png" alt="Cython annotation of derivatives() showing almost entirely yellow lines — Python object overhead on every arithmetic operation" style="width:100%;border:1px solid rgba(212,212,212,0.1);" />
+<p style="font-size:0.8rem;color:#6a6a6a;margin-top:0.5rem;">Yellow lines are Python interactions. White lines are pure C. The only white lines are the comments.</p>
+</div>
+
+## Giving Cython a Fair Chance
+
+The annotation file points to the fix: add type annotations. A `.pyx` file with `cdef` locals, typed arguments, all compiler directives enabled. The arithmetic inside **`derivatives`** becomes pure C. But the function still has a Python-callable signature (tuples in, tuple out) because **`rk4_step`** is still Python and that is the only way they can talk to each other:
+
+```cython
+# Python-callable — tuples cross the boundary every call
+def derivatives_cy(tuple state, tuple inputs, tuple params):
+    cdef double x1, x2, x3, xe
+    x1, x2, x3, xe = state        # unbox: Python tuple -> C doubles
+    ...
+    return (dx1, dx2, dx3, dCe)   # rebox: C doubles -> Python tuple
+```
+
+**`rk4_step`** calls this 4x per step. 
+Each call has to acquire the GIL (Python's global lock that serializes all Python execution), 
+unpack the Python tuple into C doubles, do the arithmetic, 
+pack the results back into a new Python tuple, hand it back.
+This happens (4 times per step) * (600 steps per patient) * (200 patients per candidate) * 
+(512 candidates per grid search).
+
+| | Time | Speedup |
+|---|---|---|
+| Pure Python | 184.3s | 1.0x |
+| Naive Cython | 174.6s | 1.06x |
+| Typed Cython (**`derivatives`** only) | 178.9s | 1.03x |
+
+Wait... Still nothing?
+
+Let's put on our HPC hats and actually profile the program to find the issue.
+
+## Profiling the Bottleneck
+
+The profiler shows where time actually goes.
+
+As we will see, the "Obviously slow function" is not always the bottleneck.
+
+```
+# python profile_sim.py  (20-patient cohort, 60 min simulation, dt=0.1)
+
+         444402 function calls in 0.074 seconds
+
+   ncalls  tottime  percall  cumtime  percall  function
+    12000    0.029    0.000    0.050    0.000  core.py: rk4_step
+    48000    0.007    0.000    0.007    0.000  schnider.py: derivatives
+    60000    0.005    0.000    0.005    0.000  core.py: <genexpr>  (state update)
+```
+
+- **`tottime`**: time spent inside the function itself, excluding any calls it makes.
+- **`cumtime`**: total time including everything it calls.
+
+**`rk4_step`** has tottime 0.029s and cumtime 0.050s. The gap, 0.021s, is time spent waiting on **`derivatives`** to return. But **`derivatives`** tottime is only 0.007s, less than the 0.021s gap. The missing 0.014s is Python call overhead: the tuple packing, unpacking, and object management that happens at the boundary every time **`rk4_step`** calls **`derivatives`**. That overhead does not show up in either function's tottime. It lives in the gap between them.
+
+The arithmetic inside **`derivatives`** was never the problem. 
+The cost of calling it from Python was.
+
+Line-level profiling confirms it:
+
+`kernprof -l -v profile_sim.py`:
+
+```
+# rk4_step  —  12,000 calls, 160ms total
+
+Line    Hits       Time   % Time  Contents
+  59   12000    26745.0    16.7%  k1 = deriv(state, inputs, params)
+  61   12000    11156.0     7.0%  s2 = tuple(s + 0.5*dt*d for s,d in zip(state,k1))
+  62   12000    25210.0    15.8%  k2 = deriv(s2, inputs, params)
+  64   12000    10436.0     6.5%  s3 = tuple(s + 0.5*dt*d for s,d in zip(state,k2))
+  65   12000    24965.0    15.6%  k3 = deriv(s3, inputs, params)
+  67   12000    10903.0     6.8%  s4 = tuple(s + dt*d for s,d in zip(state,k3))
+  68   12000    25119.0    15.7%  k4 = deriv(s4, inputs, params)
+  70   12000    23129.0    14.5%  return tuple(s + (dt/6.0)*(...) for ...)
+
+# derivatives  —  48,000 calls, 42ms total
+
+Line    Hits       Time   % Time  Contents
+  82   48000     5579.0    13.4%  x1, x2, x3, xe = state
+  83   48000     4513.0    10.8%  (u,) = inputs
+  84   48000     5909.0    14.2%  v1,v2,v3,k10,... = params[:9]
+  86   48000     5379.0    12.9%  dx1 = u - (k10+k12+k13)*x1 + k21*x2 + k31*x3
+  87   48000     5108.0    12.2%  dx2 = k12*x1 - k21*x2
+  88   48000     4738.0    11.4%  dx3 = k13*x1 - k31*x3
+  89   48000     4926.0    11.8%  dCe = ke0*(C1 - Ce)
+  91   48000     5577.0    13.4%  return (dx1, dx2, dx3, dCe)
+```
+
+In **`rk4_step`**, the four **`deriv()`** calls and the four `tuple()` constructions account for ~90% of its cost: the overhead of crossing the Python/C boundary, boxing floats into Python objects, and garbage-collecting them. In **`derivatives`**, every line costs roughly the same. There is no one slow line because the whole function is equally bound by Python object overhead.
+
+**`derivatives()`** accounts for a fraction of total time. The majority is in **`rk4_step`**, specifically the tuple construction at every step, the generator expression, and the Python callable dispatch. The loop overhead around the arithmetic costs more than the arithmetic itself.
+
+This explains the 1.03x result above. Typing **`derivatives`** was never going to help, because **`derivatives`** was never the problem. Both functions need to be in C together, with no Python boundary between them.
+
+## Putting Both Functions in a Single C Function
+
+The fix is to put **`derivatives`** and **`rk4_step`** in the same `.pyx` file and declare **`derivatives`** with `cdef` instead of `def`.
+
+    - *`def`* means Python-callable: tuples in, tuple out, Python object overhead on every call. 
+    - *`cdef`* means C-only: the function is invisible to Python entirely, takes plain numbers, and writes its outputs directly into memory.
+    - *If you don't remember C, the *\** in front of `dx1` that modifying `dx1` persists outside of the function.
+    This is how you update multiple variables within a function in C instead of returning a bunch of variables.*
+
+The full snippet:
+
+```cython
+# cython_ext/schnider_full_cy.pyx
+# cython: boundscheck=False, wraparound=False, cdivision=True
+
+cdef inline void derivatives_fast(
+    # Inputs
+    double x1, double x2, double x3, double xe,
+    double u, double v1,
+    double k10, double k12, double k13, double k21, double k31, double ke0,
+    # Outputs
+    double *dx1, double *dx2, double *dx3, double *dCe
+) noexcept nogil:
+    # ODEs
+    cdef double C1 = x1 / (v1 * 1000.0)
+    dx1[0] = u - (k10 + k12 + k13) * x1 + k21 * x2 + k31 * x3
+    dx2[0] = k12 * x1 - k21 * x2
+    dx3[0] = k13 * x1 - k31 * x3
+    dCe[0] = ke0 * (C1 - xe)   # xe is Ce (µg/mL)
+```
+
+Now, we make RK4 step declare all intermediate values as typed C doubles and calls the C version of derivatives, **`derivatives_fast`**, directly.
+
+```cython
+cdef void rk4_step_cy(
+    double x1, double x2, double x3, double xe,
+    double u,
+    double k10, double k12, double k13, double k21, double k31, double ke0,
+    double dt,
+    double *ox1, double *ox2, double *ox3, double *oxe,
+):
+    # RK4 calls derivatives 4 times, we store the results in these variables
+    cdef double k1x1, k1x2, k1x3, k1xe
+    cdef double k2x1, k2x2, k2x3, k2xe
+    cdef double k3x1, k3x2, k3x3, k3xe
+    cdef double k4x1, k4x2, k4x3, k4xe
+
+    cdef double h2 = 0.5 * dt
+    cdef double dt6 = dt / 6.0
+
+    derivatives_fast(x1, x2, x3, xe, u, k10,k12,k13,k21,k31,ke0,
+                     &k1x1,&k1x2,&k1x3,&k1xe)
+    # ... midpoint states, k2, k3, k4 ...
+    ox1[0] = x1 + dt6 * (k1x1 + 2.0*k2x1 + 2.0*k3x1 + k4x1)
+    # ...
+```
+
+One Python-callable **`simulate_closed_loop_cy()`** wraps the loop, while **`rk4_step_cy`** runs the physics entirely in C.
+This gets us to **54.7s, a 3.4x speedup**. 
+
+This would result in a 10,000 cohort FDA analysis run-time of 6.25 days (15 days less than baseline). 
+Now we are saving some trees!
+
+But we can do better.
+
+### Transpiling the PID controller
+
+The PID controller has the same property as **`derivatives`**: it's called 600 times per simulation, it's pure arithmetic with a bit of branching (anti-windup, saturation), and it has no reason to touch Python objects. A Cython `cdef struct` holds the controller state as C doubles, and **`pid_step`** becomes a `cdef inline` function:
+
+```cython
+cdef struct PIDState:
+    double kp, ki, kd
+    double setpoint, dt
+    double max_rate, min_rate
+    double integral, prev_measurement
+    int    first_step
+
+cdef inline double pid_step(PIDState *pid, double measurement) noexcept nogil:
+    cdef double error = measurement - pid.setpoint
+    cdef double p     = pid.kp * error
+    cdef double d     = 0.0 if pid.first_step else \
+                        pid.kd * (measurement - pid.prev_measurement) / pid.dt
+    cdef double output = p + pid.ki * pid.integral + d
+    if not (output >= pid.max_rate or output <= pid.min_rate):
+        pid.integral += error * pid.dt
+    pid.prev_measurement = measurement
+    pid.first_step = 0
+    if output > pid.max_rate: return pid.max_rate
+    if output < pid.min_rate: return pid.min_rate
+    return output
+```
+
+While we're in there, the Hill equation (BIS from Ce) is also called every step:
+
+```cython
+cdef inline double bis_fast(
+    double Ce,
+    double e0, double emax, double ec50, double gamma,
+) noexcept nogil:
+    # Ce is already in µg/mL — no volume division needed
+    if Ce <= 0.0:
+        return e0
+    cdef double ceg = cpow(Ce, gamma)
+    cdef double val = e0 - emax * ceg / (cpow(ec50, gamma) + ceg)
+    return val if val > 0.0 else 0.0
+```
+
+All four functions (**`derivatives_fast`**, **`rk4_step_cy`**, **`bis_fast`**, **`pid_step`**) are marked `noexcept nogil`. The simulation loop acquires the GIL once to call into Python, then runs entirely in C. For the grid search, we don't even need a `SimulationResult`. A scalar ISE accumulator is enough:
+
+```cython
+def simulate_closed_loop_cy(patient, kp, ki, kd, duration, dt, ...):
+    # unpack params once at Python boundary
+    # initialize PIDState struct from gains
+    for i in range(n_steps):
+        bis = bis_fast(xe, e0, emax, ec50, gamma)
+        u   = pid_step(&pid, bis)
+        ise += (bis - bis_target)**2 * dt   # accumulate, no lists
+        rk4_step_cy(x1,x2,x3,xe, u, v1, k10,..., &ox1,&ox2,&ox3,&oxe)
+        x1=ox1; x2=ox2; x3=ox3; xe=oxe
+    return ise
+```
+
+## Benchmark Results
+
+```
+200-patient cohort, 60 min simulation, dt=0.1 min
+
+Pure Python:                    347 ms / cohort
+Full C (time-series output):     24 ms / cohort  →  14.5×
+Full C (scalar ISE, grid mode):   5 ms / cohort  →  65.7×
+```
+
+Full grid search (512 candidates × 200 patients):
+
+| | Time | Speedup |
+|---|---|---|
+| Pure Python baseline | 185.2s | 1.0× |
+| Naive Cython | 174.6s | 1.06× |
+| Typed Cython (**`derivatives`** only) | 178.9s | 1.03× |
+| Full C (**`rk4_step`** + **`derivatives`**) | 54.7s | 3.4× |
+| Full C + PID + Hill equation (scalar) | **2.7s** | **68×** |
+
+The scalar mode is the key insight: when you're grid searching, you don't need time-series. You need one number per candidate. Eliminating the list allocation cuts another 5× on top of the physics speedup.
+
+## Parallelism — the final multiplier
+
+The C extension eliminated the GIL bottleneck inside each simulation. That means the work is now embarrassingly parallel: 512 independent candidates, no shared state, no coordination needed. `multiprocessing.Pool` maps candidates across cores. Each worker loads the cohort once in its initializer so the patient data never crosses the IPC boundary per task. Only `(kp, ki, kd)` tuples do.
+
+```python
+def _init_worker(cohort_path):
+    global _cohort
+    _cohort = cohort_from_json(cohort_path)   # loaded once per process
+
+def _evaluate(args):
+    kp, ki, kd = args
+    ises = [simulate_closed_loop_cy(p, kp=kp, ki=ki, kd=kd, ...) for p in _cohort]
+    return LAMBDA_NORM * sum(ises) / (len(_cohort) * ISE_REF), kp, ki, kd
+
+with Pool(processes=14, initializer=_init_worker, initargs=(cohort_path,)) as pool:
+    results = pool.map(_evaluate, candidates)
+```
+
+```
+Grid: 512 candidates  |  Workers: 14
+Done in 0.60s  (1.2 ms/candidate)
+Best gains: kp=4000  ki=600  kd=2000
+```
+
+## What This Means at Scale
+
+The full progression:
+
+| | Time | Speedup |
+|---|---|---|
+| Pure Python | 185.2s | 1.0× |
+| Naive Cython | 174.6s | 1.06× |
+| Typed Cython (**`derivatives`** only) | 178.9s | 1.03× |
+| Full C (**`rk4_step`** + **`derivatives`**) | 54.7s | 3.4× |
+| Full C + PID + Hill + scalar | 2.7s | 68× |
+| **Full C + parallel (14 cores)** | **0.6s** | **308×** |
+
+185 seconds to 0.6 seconds to run an identical process. 
+That 21-day baseline effort would now run in less than 2 hours.
+That is the difference between a one-time, stupidly expensive job, into something you run continuously as part of a validation pipeline.
+
+And this is one model. A real program has several. Schnider for propofol. Minto for remifentanil. Hovorka for insulin.
+Each one goes through the same process: implement in Python, build a cohort, design a controller, profile, identify the hot path, transpile, parallelize.
+Every model requires the same expertise applied from scratch.
+
+That process is what took time here. Not the coding. The knowing what to look for.
+
+**The profiler told us **`rk4_step`** was 68% of runtime.** That's not obvious. Researchers target **`derivatives`** because it's the physics, and it feels like it should be the work. The profiler disagreed.
+Without it, you optimize the wrong thing and conclude that Cython doesn't help.
+
+**The `noexcept nogil` detail mattered.** Cython will happily compile `cdef void` functions that still acquire the GIL on every call because they might raise a Python exception. One annotation eliminates that. It's not in any tutorial. You find it in a performance hint buried in the compiler output.
+
+**The scalar vs. time-series distinction cut another 5×.** That one isn't Cython knowledge at all, but about understanding that a grid search only needs a loss value, not a waveform. But you have to think to ask the question.
+
+This is the pattern: the speedup comes from a sequence of small, specific, correct decisions. Each one is findable. None of them are obvious in advance.
+
+---
+
+That sequence of decisions is what [Myelin](https://runaxon.com) is being built to automate.
+
+The goal: Myelin watches your simulation run, identifies the functions in the hot path, generates the typed Cython with the right annotations, validates that the C output matches the Python reference to floating-point precision, and dispatches the work across your available cores. You write the Python model: the physiology, the controller, the loss function. Myelin handles everything else.
+
+A researcher who has never heard of `noexcept nogil` should get the same 308× as someone who spent weeks learning Cython internals and multiprocessing patterns. Because they should not have to spend those weeks. They have a model to validate.
+
+
+---
+
+## Appendix: Correctness
+
+Two things that didn't fit in the main story but matter for anyone using this code.
+
+**The Ce ODE bug.** The first version of **`derivatives()`** had `dxe_dt = ke0 * (x1 - xe)`: `x1` in µg, `xe` in µg, looks fine, dimensionally wrong. The correct form, derived from Sheiner (1979) and Hull (1978), is `dCe_dt = ke0 * (C1 - Ce)` where both sides are concentrations in µg/mL. The effect-site volume $V_e$ cancels exactly and never appears. The bug was masked because `outputs()` also divided by the wrong volume, and two errors cancelled numerically, BIS looked correct throughout. `mass_balance_test.py` exposes it: the buggy version creates ~2.8% phantom drug mass. The fixed version closes to floating-point precision.
+
+**Integrator validation.** The Schnider system is linear, so a closed-form solution exists: `x[n+1] = Ad @ x[n] + Bd * u` where `Ad = expm(A*dt)` and `Bd = A⁻¹*(Ad-I)*B` are precomputed once per patient. Comparing RK4 against this exact solution at decreasing step sizes confirms O(dt⁴) convergence. At the default `dt=0.1` min, max Cp error is 1e-5 µg/mL against ~3 µg/mL therapeutic concentrations, seven orders of magnitude below the signal. The repo includes `validation/validate_rk4.py` to reproduce this.
+
+<div>
+<img src="/images/blog/rk4_error.png" alt="Log-log plot of RK4 integration error vs step size showing O(dt⁴) convergence for Cp, Ce, and BIS" style="width:100%;border:1px solid rgba(212,212,212,0.1);" />
+<p style="font-size:0.8rem;color:#6a6a6a;margin-top:0.5rem;">Three panels, left to right: Cp error (µg/mL), Ce error (µg/mL), BIS error. X-axis is step size dt, decreasing left to right (coarse to fine). Colored solid lines with dots are the measured RK4 vs analytical errors. Grey dashed line is the O(dt⁴) reference. If the measured errors are parallel to it, the integrator is converging at the correct order. They are.</p>
+</div>
