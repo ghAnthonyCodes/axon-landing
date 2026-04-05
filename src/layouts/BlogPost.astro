@@ -12,26 +12,8 @@ const { frontmatter } = Astro.props;
     --muted:   #6a6a6a;
     --border:  rgba(212,212,212,0.1);
   }
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  html { font-size: 16px; scroll-behavior: smooth; }
-  body { background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, sans-serif; line-height: 1.6; }
-
-  nav {
-    border-bottom: 1px solid var(--border);
-    padding: 1.25rem 2rem;
-    position: sticky;
-    top: 0;
-    background: var(--bg);
-    z-index: 10;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    max-width: 860px;
-    margin: 0 auto;
-  }
-  /* nav is inside body so we need full-width bar */
-  body > nav { max-width: unset; padding: 1.25rem 2rem; }
-  .nav-inner { max-width: 860px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; width: 100%; }
+  nav { border-bottom: 1px solid var(--border); padding: 1.25rem 0; position: sticky; top: 0; background: var(--bg); z-index: 10; }
+  .nav-inner { max-width: 860px; margin: 0 auto; padding: 0 2rem; display: flex; align-items: center; justify-content: space-between; }
   .logo { font-family: monospace; font-size: 1.1rem; font-weight: 700; letter-spacing: 0.15em; color: var(--accent); text-transform: uppercase; text-decoration: none; }
   .nav-right a { color: var(--muted); text-decoration: none; font-size: 0.875rem; margin-left: 2rem; transition: color 0.2s; }
   .nav-right a:hover { color: var(--text); }
@@ -75,6 +57,7 @@ const { frontmatter } = Astro.props;
   <div class="nav-inner">
     <a class="logo" href="/">AXON</a>
     <div class="nav-right">
+      <a href="/learn">Learn</a>
       <a href="/blog">Blog</a>
     </div>
   </div>

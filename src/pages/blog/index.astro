@@ -2,8 +2,10 @@
 import Base from '../../layouts/Base.astro';
 
 const postModules = import.meta.glob('./*.mdx', { eager: true });
-const posts = Object.values(postModules) as any[];
-posts.sort((a, b) => new Date(b.frontmatter.date).valueOf() - new Date(a.frontmatter.date).valueOf());
+const allPosts = Object.values(postModules) as any[];
+const posts = allPosts
+  .filter(p => import.meta.env.DEV || !p.frontmatter.draft)
+  .sort((a, b) => new Date(b.frontmatter.date).valueOf() - new Date(a.frontmatter.date).valueOf());
 ---
 <Base title="Blog — AXON" description="Technical articles on simulation, optimization, and scientific computing from the AXON team.">
 <style>
@@ -15,11 +17,8 @@ posts.sort((a, b) => new Date(b.frontmatter.date).valueOf() - new Date(a.frontma
     --muted:   #6a6a6a;
     --border:  rgba(212,212,212,0.1);
   }
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  html { font-size: 16px; }
-  body { background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, sans-serif; line-height: 1.6; }
-  nav { border-bottom: 1px solid var(--border); padding: 1.25rem 2rem; position: sticky; top: 0; background: var(--bg); z-index: 10; }
-  .nav-inner { max-width: 860px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; }
+  nav { border-bottom: 1px solid var(--border); padding: 1.25rem 0; position: sticky; top: 0; background: var(--bg); z-index: 10; }
+  .nav-inner { max-width: 860px; margin: 0 auto; padding: 0 2rem; display: flex; align-items: center; justify-content: space-between; }
   .logo { font-family: monospace; font-size: 1.1rem; font-weight: 700; letter-spacing: 0.15em; color: var(--accent); text-transform: uppercase; text-decoration: none; }
   .nav-right a { color: var(--muted); text-decoration: none; font-size: 0.875rem; margin-left: 2rem; transition: color 0.2s; }
   .nav-right a:hover { color: var(--text); }
@@ -51,6 +50,7 @@ posts.sort((a, b) => new Date(b.frontmatter.date).valueOf() - new Date(a.frontma
   <div class="nav-inner">
     <a class="logo" href="/">AXON</a>
     <div class="nav-right">
+      <a href="/learn">Learn</a>
       <a href="/blog">Blog</a>
     </div>
   </div>

@@ -34,6 +34,11 @@ const { title, description = 'Automatic, scalable simulation infrastructure for 
 </>}
 {katex && <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">}
 </head>
+<style is:global>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 16px; scroll-behavior: smooth; }
+  body { background: #141414; color: #d4d4d4; font-family: system-ui, -apple-system, sans-serif; line-height: 1.6; }
+</style>
 <body>
   <slot />
 </body>

@@ -1,0 +1,139 @@
+---
+layout: '../../../layouts/LearnPost.astro'
+title: "Vectors and What They Actually Represent"
+description: "Most introductions to vectors start with arrows on a whiteboard. We'll start with drug concentrations in blood, and end up in the same place with a lot more intuition."
+chapter: "Linear Algebra"
+chapter_slug: "linear-algebra"
+section: "Lesson 1"
+next:
+  title: "Problems: Vectors"
+  url: /learn/linear-algebra/01-vectors-problems
+
+---
+
+Here is a concrete problem. A patient is given a drug. At any moment in time, that drug is distributed across three compartments in their body: the bloodstream (central compartment), a fast-equilibrating peripheral tissue, and a slow-equilibrating peripheral tissue.
+
+At time $t$, the state of the system is fully described by three numbers:
+
+$$
+c_1(t), \quad c_2(t), \quad c_3(t)
+$$
+
+the drug concentration in each compartment.
+
+You could write these three numbers separately and track them independently. But the moment you start doing math with them (simulating how the system evolves, applying a control input, comparing two patients) you'll find yourself doing the same operations to all three numbers simultaneously.
+
+That is the moment a **vector** becomes useful. Not as a concept to memorize, but as a notation that reflects what you're already doing.
+
+$$
+\mathbf{x}(t) = \begin{bmatrix} c_1(t) \\ c_2(t) \\ c_3(t) \end{bmatrix}
+$$
+
+This is the **state vector**. It is not a geometric arrow. It is a list of numbers that fully describes the state of a system at a point in time.
+
+---
+
+## What a vector actually is
+
+A vector is an ordered list of numbers. That's it.
+
+$$
+\mathbf{v} = \begin{bmatrix} v_1 \\ v_2 \\ \vdots \\ v_n \end{bmatrix}
+$$
+
+The number of elements $n$ is the **dimension** of the vector. The drug concentration example above is a vector in $\mathbb{R}^3$ (three real numbers).
+
+The geometric picture (arrows in space) is a valid interpretation for 2D and 3D vectors, and it's useful for building intuition about operations like addition and scaling. But the geometric picture is not the definition. You will work with vectors in $\mathbb{R}^{10}$ or $\mathbb{R}^{100}$, where there is no meaningful arrow to draw.
+
+---
+
+## Two operations that define vector arithmetic
+
+### Scalar multiplication
+
+Multiplying a vector by a scalar $\alpha$ scales every element:
+
+$$
+\alpha \mathbf{v} = \begin{bmatrix} \alpha v_1 \\ \alpha v_2 \\ \vdots \\ \alpha v_n \end{bmatrix}
+$$
+
+**In the drug model:** if all compartment concentrations double (say, a second identical dose is given), the state vector doubles: $2\mathbf{x}$.
+
+### Vector addition
+
+Adding two vectors adds element-by-element:
+
+$$
+\mathbf{u} + \mathbf{v} = \begin{bmatrix} u_1 + v_1 \\ u_2 + v_2 \\ \vdots \\ u_n + v_n \end{bmatrix}
+$$
+
+This only makes sense when both vectors have the same dimension. You cannot add a vector in $\mathbb{R}^3$ to one in $\mathbb{R}^2$.
+
+**In the drug model:** if you want to describe the combined state of two drugs administered simultaneously, and each is represented as a state vector, their combined effect in a linear system is the sum of their individual state vectors.
+
+---
+
+## The dot product
+
+The dot product of two vectors $\mathbf{u}$ and $\mathbf{v}$ (same dimension) is a single number:
+
+$$
+\mathbf{u} \cdot \mathbf{v} = \sum_{i=1}^{n} u_i v_i = u_1 v_1 + u_2 v_2 + \cdots + u_n v_n
+$$
+
+**Why this matters:** the dot product measures how much two vectors "align." This will show up repeatedly: in projections, in the output equation of a state-space model, and in optimization.
+
+A useful property: if $\mathbf{u} \cdot \mathbf{v} = 0$, the vectors are **orthogonal**, meaning they share no component in common. In a geometric picture, they are perpendicular. In a system context, orthogonality often means two quantities are independent.
+
+### The norm
+
+The **norm** (length) of a vector is defined using the dot product with itself:
+
+$$
+\|\mathbf{v}\| = \sqrt{\mathbf{v} \cdot \mathbf{v}} = \sqrt{v_1^2 + v_2^2 + \cdots + v_n^2}
+$$
+
+This is the Euclidean distance from the origin to the point $\mathbf{v}$. In a control context, the norm of the error state vector tells you how far the system is from its target: a single number summarizing deviation across all state variables simultaneously.
+
+---
+
+## Linear combinations and span
+
+A **linear combination** of vectors $\mathbf{v}_1, \mathbf{v}_2, \ldots, \mathbf{v}_k$ with scalar coefficients $\alpha_1, \ldots, \alpha_k$ is:
+
+$$
+\alpha_1 \mathbf{v}_1 + \alpha_2 \mathbf{v}_2 + \cdots + \alpha_k \mathbf{v}_k
+$$
+
+The **span** of a set of vectors is the set of all possible linear combinations: every vector you can reach by scaling and adding them.
+
+This concept becomes critical when we ask: given a set of possible control inputs, what states can we actually drive the system to? That question (**controllability**) is answered by examining the span of certain vectors derived from the system matrices. We'll get there in the controller design chapter. For now, just hold the concept.
+
+---
+
+## Putting it together: the state vector in simulation
+
+When you simulate a PK/PD system, you are tracking how a state vector evolves over time. At each time step, the simulation computes a new vector:
+
+$$
+\mathbf{x}(t + \Delta t) \approx \mathbf{x}(t) + \Delta t \cdot f(\mathbf{x}(t), u(t))
+$$
+
+where $f$ is a function that computes the rate of change of each compartment concentration, and $u(t)$ is the drug infusion rate (the control input).
+
+Every piece of this (the state, the update, the input) is a vector or an operation on vectors. This is why linear algebra comes first.
+
+---
+
+## Summary
+
+| Concept | What it is | Why it matters |
+|---|---|---|
+| Vector | Ordered list of $n$ real numbers | Represents system state, inputs, outputs |
+| Scalar multiplication | Scale every element by $\alpha$ | Amplify or attenuate a state |
+| Vector addition | Add element-by-element | Combine states, superpose inputs |
+| Dot product | Sum of pairwise products | Measure alignment, compute outputs |
+| Norm | Length of a vector | Quantify error, distance from target |
+| Span | All reachable linear combinations | Basis for controllability analysis |
+
+In the next lesson, we introduce **matrices** and show that multiplying a matrix by a vector is just a compact way of writing a system of linear equations. That is the operation at the heart of every state-space model.

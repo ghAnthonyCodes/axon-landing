@@ -1,0 +1,118 @@
+---
+layout: '../../../layouts/LearnPost.astro'
+title: "Problems: Vectors"
+description: "Practice problems for Vectors and What They Actually Represent."
+chapter: "Linear Algebra"
+chapter_slug: "linear-algebra"
+section: "Lesson 1: Problems"
+prev:
+  title: "Vectors and What They Actually Represent"
+  url: /learn/linear-algebra/01-vectors
+next:
+  title: "Matrix Multiplication as Transformation"
+  disabled: true
+---
+
+## Mechanical
+
+<div class="problem">
+<p class="problem-num">1.1 <span class="problem-tier">Mechanical</span></p>
+
+Let $\mathbf{x} = \begin{bmatrix} 2 \\ -1 \\ 4 \end{bmatrix}$ and $\mathbf{y} = \begin{bmatrix} 0 \\ 3 \\ -2 \end{bmatrix}$.
+
+Compute:
+
+**(a)** $\mathbf{x} + \mathbf{y}$
+
+**(b)** $3\mathbf{x} - 2\mathbf{y}$
+
+**(c)** $\mathbf{x} \cdot \mathbf{y}$
+
+**(d)** $\|\mathbf{x}\|$
+</div>
+
+<div class="problem">
+<p class="problem-num">1.2 <span class="problem-tier">Mechanical</span></p>
+
+A 3-compartment PK model has the following drug concentrations at $t = 10$ min:
+
+$$
+\mathbf{x}(10) = \begin{bmatrix} 3.2 \\ 1.8 \\ 0.6 \end{bmatrix} \mu g/mL
+$$
+
+A second patient has concentrations exactly half of these. Write their state vector and compute the norm of both. What does the norm represent physically?
+</div>
+
+<div class="problem">
+<p class="problem-num">1.3 <span class="problem-tier">Mechanical</span></p>
+
+Determine whether the following pairs of vectors are orthogonal:
+
+**(a)** $\mathbf{u} = \begin{bmatrix} 1 \\ 2 \\ -1 \end{bmatrix}$, $\mathbf{v} = \begin{bmatrix} 2 \\ -1 \\ 0 \end{bmatrix}$
+
+**(b)** $\mathbf{u} = \begin{bmatrix} 1 \\ 0 \\ 1 \end{bmatrix}$, $\mathbf{v} = \begin{bmatrix} -1 \\ 3 \\ 1 \end{bmatrix}$
+</div>
+
+---
+
+## Conceptual
+
+<div class="problem">
+<p class="problem-num">1.4 <span class="problem-tier">Conceptual</span></p>
+
+The norm of a state vector $\|\mathbf{x}(t)\|$ is sometimes used as a scalar measure of how far a system is from zero.
+
+**(a)** What would $\|\mathbf{x}(t)\| = 0$ mean in a drug concentration model?
+
+**(b)** Is the norm always a meaningful distance metric for system state? When might it mislead you?
+</div>
+
+<div class="problem">
+<p class="problem-num">1.5 <span class="problem-tier">Conceptual</span></p>
+
+The superposition principle says that in a linear system, the response to a sum of inputs equals the sum of the individual responses. In vector terms: if $\mathbf{x}_A(t)$ is the state trajectory for drug A alone, and $\mathbf{x}_B(t)$ for drug B alone, the combined state is $\mathbf{x}_A(t) + \mathbf{x}_B(t)$.
+
+**(a)** What assumption about the system must hold for this to be valid?
+
+**(b)** Give a realistic example in PK/PD where this assumption would break down.
+</div>
+
+<div class="problem">
+<p class="problem-num">1.6 <span class="problem-tier">Conceptual</span></p>
+
+A colleague says "I don't need vectors. I can track $c_1$, $c_2$, $c_3$ separately as three scalars." They're right that the math is equivalent. What do they lose by not using vector notation when they start writing code that simulates 200 patients simultaneously?
+</div>
+
+---
+
+## Applied
+
+<div class="problem">
+<p class="problem-num">1.7 <span class="problem-tier">Applied</span></p>
+
+A TCI (Target Controlled Infusion) system targets an effect-site concentration of $c^* = 4.0\ \mu g/mL$. The target state vector is:
+
+$$
+\mathbf{x}^* = \begin{bmatrix} 4.0 \\ 2.1 \\ 0.9 \end{bmatrix}
+$$
+
+At $t = 5$ min, the measured state is:
+
+$$
+\mathbf{x}(5) = \begin{bmatrix} 2.8 \\ 1.6 \\ 0.7 \end{bmatrix}
+$$
+
+**(a)** Compute the error vector $\mathbf{e}(5) = \mathbf{x}^* - \mathbf{x}(5)$.
+
+**(b)** Compute $\|\mathbf{e}(5)\|$. 
+
+**(c)** A simple controller only cares about compartment 1 (the effect-site). Define a vector $\mathbf{w} = \begin{bmatrix} 1 \\ 0 \\ 0 \end{bmatrix}$ and compute $\mathbf{w} \cdot \mathbf{e}(5)$. What does this dot product extract, and why is this a useful operation?
+</div>
+
+<div class="problem">
+<p class="problem-num">1.8 <span class="problem-tier">Applied</span></p>
+
+You are running a simulation over $N = 200$ patients. Each patient's state at $t = 30$ min is a vector in $\mathbb{R}^3$. You want to find the patient whose state is furthest from the target $\mathbf{x}^*$.
+
+Describe the algorithm in terms of vector operations (no code required). What single operation do you apply to each patient, and how do you identify the worst case?
+</div>

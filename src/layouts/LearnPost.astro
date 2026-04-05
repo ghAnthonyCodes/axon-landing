@@ -1,0 +1,123 @@
+---
+import Base from './Base.astro';
+const { frontmatter } = Astro.props;
+---
+<Base title={`${frontmatter.title} — AXON Learn`} description={frontmatter.description} katex={true}>
+<style>
+  :root {
+    --bg:      #141414;
+    --surface: #1e1e1e;
+    --accent:  #57c4b8;
+    --text:    #d4d4d4;
+    --muted:   #6a6a6a;
+    --border:  rgba(212,212,212,0.1);
+  }
+  nav { border-bottom: 1px solid var(--border); padding: 1.25rem 0; position: sticky; top: 0; background: var(--bg); z-index: 10; }
+  .nav-inner { max-width: 860px; margin: 0 auto; padding: 0 2rem; display: flex; align-items: center; justify-content: space-between; }
+  .logo { font-family: monospace; font-size: 1.1rem; font-weight: 700; letter-spacing: 0.15em; color: var(--accent); text-transform: uppercase; text-decoration: none; }
+  .nav-right a { color: var(--muted); text-decoration: none; font-size: 0.875rem; margin-left: 2rem; transition: color 0.2s; }
+  .nav-right a:hover { color: var(--text); }
+
+  main { max-width: 680px; margin: 0 auto; padding: 4rem 2rem 6rem; }
+
+  .post-meta { margin-bottom: 2.5rem; }
+  .breadcrumb { font-family: monospace; font-size: 0.7rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.75rem; }
+  .breadcrumb a { color: var(--accent); text-decoration: none; }
+  .breadcrumb a:hover { text-decoration: underline; }
+  .chapter-label { font-family: monospace; font-size: 0.7rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent); margin-bottom: 0.75rem; }
+  h1 { font-size: clamp(1.75rem, 4vw, 2.5rem); font-weight: 700; letter-spacing: -0.02em; color: #f0f0f0; line-height: 1.15; margin-bottom: 0.75rem; }
+  .post-desc { color: var(--muted); font-size: 0.9rem; margin-top: 0.5rem; }
+
+  .prose { color: var(--text); }
+  .prose h2 { font-size: 1.4rem; font-weight: 700; color: #f0f0f0; margin: 2.5rem 0 0.75rem; letter-spacing: -0.01em; }
+  .prose h3 { font-size: 1.1rem; font-weight: 600; color: #f0f0f0; margin: 2rem 0 0.5rem; }
+  .prose p { margin-bottom: 1.25rem; font-size: 0.975rem; line-height: 1.75; }
+  .prose a { color: var(--accent); text-decoration: none; border-bottom: 1px solid rgba(87,196,184,0.3); }
+  .prose a:hover { border-color: var(--accent); }
+  .prose code { font-family: monospace; font-size: 0.85em; background: var(--surface); padding: 0.15em 0.4em; color: var(--accent); }
+  .prose pre { background: var(--surface) !important; border: 1px solid var(--border); padding: 1.25rem !important; overflow-x: auto; margin-bottom: 1.5rem; font-size: 12px !important; }
+  .prose pre code { background: none; padding: 0; color: var(--text); font-size: 12px !important; line-height: 1.7; }
+  .prose ul, .prose ol { padding-left: 1.5rem; margin-bottom: 1.25rem; }
+  .prose li { margin-bottom: 0.4rem; font-size: 0.975rem; line-height: 1.75; }
+  .prose hr { border: none; border-top: 1px solid var(--border); margin: 2.5rem 0; }
+  .prose blockquote { border-left: 2px solid var(--accent); padding-left: 1rem; color: var(--muted); margin-bottom: 1.25rem; }
+  .prose table { width: 100%; border-collapse: collapse; margin-bottom: 1.5rem; font-size: 0.9rem; }
+  .prose th { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--accent); color: #f0f0f0; font-weight: 600; }
+  .prose td { padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); }
+
+  /* Problems */
+  .prose .problem { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--accent); padding: 1.25rem 1.5rem; margin-bottom: 1.25rem; }
+  .prose .problem-num { font-family: monospace; font-size: 0.65rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--accent); margin-bottom: 0.5rem; }
+  .prose .problem-tier { font-family: monospace; font-size: 0.65rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-left: 0.75rem; }
+  .prose .problem p:last-child { margin-bottom: 0; }
+
+  .lesson-nav { display: flex; justify-content: space-between; align-items: center; margin-top: 4rem; padding-top: 2rem; border-top: 1px solid var(--border); gap: 1rem; }
+  .lesson-nav a { color: var(--muted); text-decoration: none; font-size: 0.875rem; transition: color 0.2s; max-width: 45%; }
+  .lesson-nav a:hover { color: var(--accent); }
+  .lesson-nav .nav-label { font-family: monospace; font-size: 0.65rem; letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 0.25rem; }
+  .lesson-nav .nav-title { font-weight: 600; color: #f0f0f0; }
+  .lesson-nav a:hover .nav-title { color: var(--accent); }
+  .lesson-nav .next { text-align: right; margin-left: auto; }
+  .lesson-nav .disabled { color: var(--muted); font-size: 0.875rem; max-width: 45%; text-align: right; margin-left: auto; opacity: 0.4; cursor: default; }
+  .lesson-nav .disabled .nav-title { color: var(--muted); font-weight: 600; }
+
+  footer { border-top: 1px solid var(--border); padding: 2rem; color: var(--muted); font-size: 0.78rem; }
+  footer .inner { max-width: 860px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; }
+  footer a { color: var(--muted); text-decoration: none; }
+  footer a:hover { color: var(--accent); }
+</style>
+<style is:global>
+  .prose .astro-code, .prose .astro-code span { font-size: 12px !important; }
+  .prose .katex-display { overflow-x: auto; padding: 0.5rem 0; margin-bottom: 1.25rem; }
+</style>
+
+<nav>
+  <div class="nav-inner">
+    <a class="logo" href="/">AXON</a>
+    <div class="nav-right">
+      <a href="/learn">Learn</a>
+      <a href="/blog">Blog</a>
+    </div>
+  </div>
+</nav>
+
+<main>
+  <div class="post-meta">
+    <p class="breadcrumb"><a href="/learn">Learn</a> / <a href={`/learn/${frontmatter.chapter_slug}`}>{frontmatter.chapter}</a></p>
+    <p class="chapter-label">{frontmatter.chapter} &mdash; {frontmatter.section}</p>
+    <h1>{frontmatter.title}</h1>
+    {frontmatter.description && <p class="post-desc">{frontmatter.description}</p>}
+  </div>
+  <div class="prose">
+    <slot />
+  </div>
+
+  <nav class="lesson-nav">
+    {frontmatter.prev && (
+      <a href={frontmatter.prev.url}>
+        <div class="nav-label">← Previous</div>
+        <div class="nav-title">{frontmatter.prev.title}</div>
+      </a>
+    )}
+    {frontmatter.next && frontmatter.next.url && (
+      <a href={frontmatter.next.url} class="next">
+        <div class="nav-label">Next →</div>
+        <div class="nav-title">{frontmatter.next.title}</div>
+      </a>
+    )}
+    {frontmatter.next && frontmatter.next.disabled && (
+      <div class="disabled next">
+        <div class="nav-label">Next →</div>
+        <div class="nav-title">{frontmatter.next.title}</div>
+      </div>
+    )}
+  </nav>
+</main>
+
+<footer>
+  <div class="inner">
+    <span>AXON &copy; 2026</span>
+    <a href="/learn">Back to Learn</a>
+  </div>
+</footer>
+</Base>

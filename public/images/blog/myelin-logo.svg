@@ -1,0 +1,27 @@
+<svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg" style="background:#141414;">
+
+  <!-- Dendrite branches (left side) -->
+  <line x1="80" y1="200" x2="40" y2="155" stroke="#f0f0f0" stroke-width="2" stroke-linecap="round"/>
+  <line x1="80" y1="200" x2="32" y2="200" stroke="#f0f0f0" stroke-width="2" stroke-linecap="round"/>
+  <line x1="80" y1="200" x2="40" y2="245" stroke="#f0f0f0" stroke-width="2" stroke-linecap="round"/>
+  <!-- sub-branches -->
+  <line x1="40" y1="155" x2="18" y2="138" stroke="#f0f0f0" stroke-width="1.2" stroke-linecap="round" opacity="0.6"/>
+  <line x1="40" y1="155" x2="22" y2="168" stroke="#f0f0f0" stroke-width="1.2" stroke-linecap="round" opacity="0.6"/>
+  <line x1="40" y1="245" x2="18" y2="232" stroke="#f0f0f0" stroke-width="1.2" stroke-linecap="round" opacity="0.6"/>
+  <line x1="40" y1="245" x2="22" y2="258" stroke="#f0f0f0" stroke-width="1.2" stroke-linecap="round" opacity="0.6"/>
+
+  <!-- Axon (main shaft, right side) -->
+  <line x1="80" y1="200" x2="340" y2="200" stroke="#f0f0f0" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- Myelin sheath wrapping the axon shaft -->
+  <path d="M 110 172 Q 225 164 340 168 L 340 232 Q 225 236 110 228 Z"
+        fill="rgba(211,134,155,0.07)" stroke="#d3869b" stroke-width="2.5"/>
+
+  <!-- Axon terminal (right tip) -->
+  <circle cx="340" cy="200" r="5" fill="#f0f0f0" opacity="0.7"/>
+
+  <!-- Label -->
+  <text x="200" y="345" text-anchor="middle" font-family="monospace" font-size="22"
+        font-weight="600" letter-spacing="0.2em" fill="#d3869b">MYELIN</text>
+
+</svg>

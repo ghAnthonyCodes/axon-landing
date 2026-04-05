@@ -4,7 +4,7 @@ import '../styles/index.css';
 ---
 <Base
   title="AXON: Simulation Infrastructure"
-  description="Scalable simulation infrastructure for regulated science."
+  description="Scalable simulation infrastructure for scientific computing."
 >
 
 
@@ -14,7 +14,7 @@ import '../styles/index.css';
   "@type": "SoftwareApplication",
   "name": "AXON",
   "url": "https://runaxon.com",
-  "description": "Scalable simulation infrastructure for regulated science.",
+  "description": "Scalable simulation infrastructure for scientific computing.",
   "applicationCategory": "ScientificApplication",
   "operatingSystem": "Web",
   "offers": {
@@ -36,6 +36,7 @@ import '../styles/index.css';
     <a class="logo" href="/">AXON</a>
     <div class="nav-links">
       <a href="#myelin">Myelin</a>
+      <a href="/learn">Learn</a>
       <a href="/blog">Blog</a>
     </div>
   </div>
@@ -45,11 +46,11 @@ import '../styles/index.css';
   <section class="hero">
     <div class="container">
       <p class="eyebrow">Simulation Infrastructure</p>
-      <h1>Scalable<br>simulation infrastructure<br>for <em>regulated science</em>.</h1>
-      <p class="hero-sub">Currently in development. Join the waitlist for updates or reach out directly at anthony@runaxon.com</p>
+      <h1>Scalable<br>simulation infrastructure<br>for <em>scientific computing</em>.</h1>
+      <p class="hero-sub">Coming soon.</p>
       <div class="cta-group">
         <a href="#waitlist" class="btn btn-primary">Receive Updates</a>
-        <a href="#myelin" class="btn btn-secondary">Powered by Myelin</a>
+        <a href="#myelin" class="btn btn-secondary">Powered by <span style="color:#d3869b">Myelin</span></a>
       </div>
     </div>
   </section>
@@ -59,18 +60,95 @@ import '../styles/index.css';
       <div class="myelin-inner">
         <div>
           <p class="myelin-label">Start for free</p>
-          <h2>Begin with Myelin.<br>Scale with AXON.</h2>
-          <p>Myelin is a free VS Code extension that transpiles your Python simulation code to optimized C modules.</p>
-          <p>It automatically profiles your code, identifies bottlenecks, transpiles to C, and validates correctness.</p>
-          <p>AXON is the final step, where your optimized simulation code is run at scale in our cloud infrastructure specifically tailored for regulated simulations.</p>
+          <h2>Begin with <span style="color:#d3869b">Myelin</span><br>Scale with <span style="color:#4a9eff">AXON</span></h2>
+          <p>Myelin turns VS Code into an IDE for closed-loop simulation pipelines.</p>
+          <p>Snap together modular blocks: Plant, Controller, Evaluator, and more. Myelin compiles each block to C and automatically validates it against the Python reference.</p>
+          <p>AXON runs your validated pipeline at scale.</p>
           <span class="btn-myelin btn-myelin-disabled">coming soon</span>
         </div>
-        <div class="code-block">
-          <span class="code-label before">your_sim.py</span>
-          <pre class="code-body before" set:html={`<span class="c-text">def run_ode(t, y, params):\n    dydt = params[0] * y[0]\n    \u2026\n    return dydt</span>`}></pre>
-          <div class="code-arrow">save &#x2193;</div>
-          <span class="code-label after">.forge/run_ode.c — generated</span>
-          <pre class="code-body after" set:html={`<span class="c-green">// equivalence: PASSED (1024 cases)\n// speedup:     8.3x</span>\n\n<span class="c-text">double run_ode(double t,\n               double* y,\n               double* params) {\n    \u2026\n}</span>`}></pre>
+        <div class="pipeline-diagram">
+          <!--
+            v1 diagram (four-block ring) — kept for reference
+            <svg viewBox="0 0 420 340" xmlns="http://www.w3.org/2000/svg">
+              Plant top, Measurement right, Controller bottom, Evaluator left — simple ring
+            </svg>
+          -->
+          <svg viewBox="-12 -12 524 504" xmlns="http://www.w3.org/2000/svg" aria-label="Closed-loop simulation pipeline">
+            <defs>
+              <marker id="ah" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+                <polygon points="0 0, 8 3, 0 6" fill="#57c4b8" opacity="0.8" />
+              </marker>
+              <marker id="ah-dim" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+                <polygon points="0 0, 8 3, 0 6" fill="#57c4b8" opacity="0.4" />
+              </marker>
+            </defs>
+
+            <!-- ── Optimizer boundary (outermost) ── -->
+            <rect x="6" y="6" width="488" height="468" rx="8" fill="none" stroke="rgba(87,196,184,0.25)" stroke-width="1.5" stroke-dasharray="3 7" />
+            <text x="14" y="20" font-family="monospace" font-size="7" fill="#57c4b8" opacity="0.35" letter-spacing="0.14em">OPTIMIZER</text>
+
+            <!-- ── Simulator boundary ── -->
+            <rect x="55" y="34" width="420" height="260" rx="6" fill="none" stroke="rgba(87,196,184,0.35)" stroke-width="1.5" stroke-dasharray="4 6" />
+            <text x="63" y="48" font-family="monospace" font-size="7" fill="#57c4b8" opacity="0.4" letter-spacing="0.12em">SIMULATOR</text>
+            <text x="63" y="59" font-family="monospace" font-size="7" fill="#57c4b8" opacity="0.25" letter-spacing="0.12em">SCENARIO</text>
+
+            <!-- ── Inner loop blocks ── -->
+
+            <!-- Plant (top center of simulator) -->
+            <rect x="185" y="58" width="110" height="50" rx="3" fill="#1e1e1e" stroke="rgba(212,212,212,0.18)" stroke-width="1" />
+            <text x="240" y="80" font-family="monospace" font-size="11" font-weight="600" fill="#f0f0f0" text-anchor="middle">Plant</text>
+            <text x="240" y="95" font-family="monospace" font-size="8" fill="#57c4b8" text-anchor="middle">derivatives()</text>
+
+            <!-- Measurement (right of simulator) -->
+            <rect x="352" y="148" width="112" height="50" rx="3" fill="#1e1e1e" stroke="rgba(212,212,212,0.18)" stroke-width="1" />
+            <text x="408" y="170" font-family="monospace" font-size="11" font-weight="600" fill="#f0f0f0" text-anchor="middle">Measurement</text>
+            <text x="408" y="185" font-family="monospace" font-size="8" fill="#57c4b8" text-anchor="middle">observe()</text>
+
+            <!-- Controller (bottom center of simulator) -->
+            <rect x="185" y="240" width="110" height="50" rx="3" fill="#1e1e1e" stroke="rgba(212,212,212,0.18)" stroke-width="1" />
+            <text x="240" y="262" font-family="monospace" font-size="11" font-weight="600" fill="#f0f0f0" text-anchor="middle">Controller</text>
+            <text x="240" y="277" font-family="monospace" font-size="8" fill="#57c4b8" text-anchor="middle">step()</text>
+
+            <!-- ── Inner loop flow lines ── -->
+            <!-- Plant → Measurement -->
+            <path d="M 295 83 Q 408 83 408 148" fill="none" stroke="#57c4b8" stroke-width="1.5" stroke-dasharray="6 10" stroke-opacity="0.75" marker-end="url(#ah)" style="animation: dash-flow 2s linear infinite 0s" />
+            <text x="368" y="108" font-family="monospace" font-size="7.5" fill="#57c4b8" opacity="0.55" text-anchor="middle">state</text>
+
+            <!-- Measurement → Controller -->
+            <path d="M 408 198 Q 408 265 295 265" fill="none" stroke="#57c4b8" stroke-width="1.5" stroke-dasharray="6 10" stroke-opacity="0.75" marker-end="url(#ah)" style="animation: dash-flow 2s linear infinite 0.66s" />
+            <text x="362" y="238" font-family="monospace" font-size="7.5" fill="#57c4b8" opacity="0.55" text-anchor="middle">measurement</text>
+
+            <!-- Controller → Plant (smooth left arc) -->
+            <path d="M 185 265 C 90 265 90 83 185 83" fill="none" stroke="#57c4b8" stroke-width="1.5" stroke-dasharray="6 10" stroke-opacity="0.75" marker-end="url(#ah)" style="animation: dash-flow 2s linear infinite 1.33s" />
+            <text x="84" y="178" font-family="monospace" font-size="7.5" fill="#57c4b8" opacity="0.55" text-anchor="middle">action</text>
+
+            <!-- Inner loop center label -->
+            <text x="240" y="165" font-family="monospace" font-size="9" fill="#57c4b8" text-anchor="middle" opacity="0.45">closed-loop</text>
+            <text x="240" y="179" font-family="monospace" font-size="7.5" fill="#57c4b8" text-anchor="middle" opacity="0.25">compiled to C</text>
+
+
+            <!-- ── Evaluator (below simulator) ── -->
+            <rect x="185" y="334" width="110" height="50" rx="3" fill="#1e1e1e" stroke="rgba(87,196,184,0.25)" stroke-width="1" />
+            <text x="240" y="356" font-family="monospace" font-size="11" font-weight="600" fill="#f0f0f0" text-anchor="middle">Evaluator</text>
+            <text x="240" y="371" font-family="monospace" font-size="8" fill="#57c4b8" text-anchor="middle">loss()</text>
+
+            <!-- Simulator → Evaluator -->
+            <path d="M 240 294 L 240 334" fill="none" stroke="#57c4b8" stroke-width="1.5" stroke-dasharray="5 9" stroke-opacity="0.5" marker-end="url(#ah-dim)" style="animation: dash-flow 1.8s linear infinite 0.2s" />
+            <text x="278" y="317" font-family="monospace" font-size="7.5" fill="#57c4b8" opacity="0.4" text-anchor="middle">observations</text>
+
+            <!-- ── Optimizer block (bottom, outside simulator) ── -->
+            <rect x="185" y="422" width="110" height="40" rx="3" fill="#1e1e1e" stroke="rgba(87,196,184,0.25)" stroke-width="1" />
+            <text x="240" y="440" font-family="monospace" font-size="11" font-weight="600" fill="#f0f0f0" text-anchor="middle">Optimizer</text>
+            <text x="240" y="454" font-family="monospace" font-size="8" fill="#57c4b8" text-anchor="middle">param_space()</text>
+
+            <!-- Evaluator → Optimizer -->
+            <path d="M 240 384 L 240 422" fill="none" stroke="#57c4b8" stroke-width="1.5" stroke-dasharray="5 9" stroke-opacity="0.5" marker-end="url(#ah-dim)" style="animation: dash-flow 1.8s linear infinite 0.6s" />
+            <text x="262" y="406" font-family="monospace" font-size="7.5" fill="#57c4b8" opacity="0.4" text-anchor="middle">loss</text>
+
+            <!-- Optimizer → Simulator (outer feedback loop, left side) -->
+            <path d="M 185 442 L 140 442 L 140 294" fill="none" stroke="#57c4b8" stroke-width="1.5" stroke-dasharray="5 9" stroke-opacity="0.4" marker-end="url(#ah-dim)" style="animation: dash-flow 2.5s linear infinite 0s" />
+            <text x="118" y="380" font-family="monospace" font-size="7.5" fill="#57c4b8" opacity="0.35" text-anchor="middle">params</text>
+          </svg>
         </div>
       </div>
     </div>
@@ -109,7 +187,7 @@ import '../styles/index.css';
 <footer>
   <div class="container">
     <span>AXON © 2026</span>
-    <span>Built for PK/PD at scale.</span>
+    <span>Built for scientific simulation at scale.</span>
   </div>
 </footer>
 </Base>

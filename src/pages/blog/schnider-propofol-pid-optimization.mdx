@@ -24,6 +24,8 @@ Which means:
 
 Let's get started.
 
+---
+
 ## Modeling Propofol - The Schnider Model
 
 Propofol is well modeled via a standard 3-compartment Pk/Pd model.
@@ -144,6 +146,8 @@ Where
 
 The amount of medication entering per unit time $t$, in [ug / s].
 
+---
+
 ## Python Implementation
 
 We represent the patient state as a tuple of three drug amounts and one effect-site concentration.
@@ -192,7 +196,9 @@ Running a demo with a single reference patient (40 y/o male, 70 kg, 170 cm) usin
 </div>
 
 A one-patient simulation is pratically instant, hardly interesting for a python acceleration case.
-Let's generate a cohort:
+Let's generate a cohort.
+
+---
 
 ## Virtual Cohort
 
@@ -256,6 +262,8 @@ The controller is tuned by choosing three gains: $(k_p, k_i, k_d)$.
 Finding a single set of gains to handle the full cohort is starting to sound like a 
 python script worthy of acceleration. In order to automatically select the best gains,
 we need a way to *score* a candidate set of gains.
+
+---
 
 ## Optimization Problem
 
@@ -342,6 +350,8 @@ Well for an FDA-grade validation you may want to repeat this across thousands of
 Ideally, you'd show the 95% confidence intervals of your optimal PID gains using this process.
 For 10,000 cohort samples with a 185s process each is a 21 day simulation. Ok, now that is worth accelerating.
 
+---
+
 ## First Instinct: Compile It
 
 The grid search runs 102,400 simulations. Each simulation runs ~600 RK4 steps. Each RK4 step calls **`derivatives()`** four times. That is roughly **245 million calls** to **`derivatives()`**. The obvious move is Cython.
@@ -373,6 +383,8 @@ It is fast C that does slow Python things.
 <p style="font-size:0.8rem;color:#6a6a6a;margin-top:0.5rem;">Yellow lines are Python interactions. White lines are pure C. The only white lines are the comments.</p>
 </div>
 
+---
+
 ## Giving Cython a Fair Chance
 
 The annotation file points to the fix: add type annotations. A `.pyx` file with `cdef` locals, typed arguments, all compiler directives enabled. The arithmetic inside **`derivatives`** becomes pure C. But the function still has a Python-callable signature (tuples in, tuple out) because **`rk4_step`** is still Python and that is the only way they can talk to each other:
@@ -402,6 +414,8 @@ This happens (4 times per step) * (600 steps per patient) * (200 patients per ca
 Wait... Still nothing?
 
 Let's put on our HPC hats and actually profile the program to find the issue.
+
+---
 
 ## Profiling the Bottleneck
 
@@ -463,6 +477,8 @@ In **`rk4_step`**, the four **`deriv()`** calls and the four `tuple()` construct
 **`derivatives()`** accounts for a fraction of total time. The majority is in **`rk4_step`**, specifically the tuple construction at every step, the generator expression, and the Python callable dispatch. The loop overhead around the arithmetic costs more than the arithmetic itself.
 
 This explains the 1.03x result above. Typing **`derivatives`** was never going to help, because **`derivatives`** was never the problem. Both functions need to be in C together, with no Python boundary between them.
+
+---
 
 ## Putting Both Functions in a Single C Function
 
@@ -586,6 +602,8 @@ def simulate_closed_loop_cy(patient, kp, ki, kd, duration, dt, ...):
     return ise
 ```
 
+---
+
 ## Benchmark Results
 
 ```
@@ -607,6 +625,8 @@ Full grid search (512 candidates × 200 patients):
 | Full C + PID + Hill equation (scalar) | **2.7s** | **68×** |
 
 The scalar mode is the key insight: when you're grid searching, you don't need time-series. You need one number per candidate. Eliminating the list allocation cuts another 5× on top of the physics speedup.
+
+---
 
 ## Parallelism — the final multiplier
 
@@ -631,6 +651,7 @@ Grid: 512 candidates  |  Workers: 14
 Done in 0.60s  (1.2 ms/candidate)
 Best gains: kp=4000  ki=600  kd=2000
 ```
+---
 
 ## What This Means at Scale
 
@@ -647,7 +668,7 @@ The full progression:
 
 185 seconds to 0.6 seconds to run an identical process. 
 That 21-day baseline effort would now run in less than 2 hours.
-That is the difference between a one-time, stupidly expensive job, into something you run continuously as part of a validation pipeline.
+That is the difference between a one-time, expensive job and something you run continuously as part of a validation pipeline.
 
 And this is one model. A real program has several. Schnider for propofol. Minto for remifentanil. Hovorka for insulin.
 Each one goes through the same process: implement in Python, build a cohort, design a controller, profile, identify the hot path, transpile, parallelize.
@@ -666,12 +687,10 @@ This is the pattern: the speedup comes from a sequence of small, specific, corre
 
 ---
 
-That sequence of decisions is what [Myelin](https://runaxon.com) is being built to automate.
+That sequence of decisions is what <a href="https://runaxon.com" style="color:#d3869b;border-color:rgba(211,134,155,0.3)">Myelin</a> and <span style="color:#4a9eff">AXON</span> are being built to automate.
 
-The goal: Myelin watches your simulation run, identifies the functions in the hot path, generates the typed Cython with the right annotations, validates that the C output matches the Python reference to floating-point precision, and dispatches the work across your available cores. You write the Python model: the physiology, the controller, the loss function. Myelin handles everything else.
-
-A researcher who has never heard of `noexcept nogil` should get the same 308× as someone who spent weeks learning Cython internals and multiprocessing patterns. Because they should not have to spend those weeks. They have a model to validate.
-
+<span style="color:#d3869b">Myelin</span> is a VS Code extension for building, compiling, and validating closed-loop simulation pipelines.
+<span style="color:#4a9eff">AXON</span> runs them at scale.
 
 ---
 

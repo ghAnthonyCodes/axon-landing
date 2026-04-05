@@ -1,0 +1,154 @@
+---
+import Base from '../../layouts/Base.astro';
+
+const curriculum = [
+  {
+    title: "Linear Algebra",
+    slug: "linear-algebra",
+    description: "The language of systems. Vectors, matrices, and transformations: the foundation everything else is built on.",
+    lessons: [
+      { title: "Vectors and What They Actually Represent", slug: "01-vectors", ready: true, problems: true },
+      { title: "Matrix Multiplication as Transformation", slug: "02-matrices", ready: false },
+      { title: "Eigenvalues and System Behavior", slug: "03-eigenvalues", ready: false },
+    ],
+  },
+  {
+    title: "Differential Equations",
+    slug: "differential-equations",
+    description: "How systems evolve over time. ODEs, Laplace transforms, and the mathematics of change.",
+    lessons: [
+      { title: "Ordinary Differential Equations", slug: "01-odes", ready: false },
+      { title: "The Laplace Transform", slug: "02-laplace", ready: false },
+      { title: "Stability and Equilibrium", slug: "03-stability", ready: false },
+    ],
+  },
+  {
+    title: "PK/PD Modeling",
+    slug: "pkpd-modeling",
+    description: "How drugs move through and affect the body. Compartment models, the Schnider model, and parameter estimation.",
+    lessons: [
+      { title: "Compartment Models", slug: "01-compartment-models", ready: false },
+      { title: "The Schnider Model", slug: "02-schnider-model", ready: false },
+      { title: "Effect-Site Concentration", slug: "03-effect-site", ready: false },
+    ],
+  },
+  {
+    title: "Controller Design",
+    slug: "controller-design",
+    description: "Closing the loop. PID, state-space, and model predictive control applied to physiological systems.",
+    lessons: [
+      { title: "PID Controllers", slug: "01-pid", ready: false },
+      { title: "State-Space Representation", slug: "02-state-space", ready: false },
+      { title: "Model Predictive Control", slug: "03-mpc", ready: false },
+      { title: "Loss Function Design", slug: "04-loss-functions", ready: false },
+      { title: "Kalman Filters", slug: "05-kalman-filters", ready: false },
+    ],
+  },
+];
+---
+<Base title="PCLC Engineering from Scratch — AXON" description="A curriculum for physiologic closed-loop control engineers: linear algebra, differential equations, PK/PD modeling, and controller design.">
+<style>
+  :root {
+    --bg:      #141414;
+    --surface: #1e1e1e;
+    --accent:  #57c4b8;
+    --text:    #d4d4d4;
+    --muted:   #6a6a6a;
+    --border:  rgba(212,212,212,0.1);
+  }
+  nav { border-bottom: 1px solid var(--border); padding: 1.25rem 0; position: sticky; top: 0; background: var(--bg); z-index: 10; }
+  .nav-inner { max-width: 860px; margin: 0 auto; padding: 0 2rem; display: flex; align-items: center; justify-content: space-between; }
+  .logo { font-family: monospace; font-size: 1.1rem; font-weight: 700; letter-spacing: 0.15em; color: var(--accent); text-transform: uppercase; text-decoration: none; }
+  .nav-right a { color: var(--muted); text-decoration: none; font-size: 0.875rem; margin-left: 2rem; transition: color 0.2s; }
+  .nav-right a:hover { color: var(--text); }
+
+  main { max-width: 860px; margin: 0 auto; padding: 4rem 2rem 6rem; }
+  .page-label { font-family: monospace; font-size: 0.7rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent); margin-bottom: 1rem; }
+  h1 { font-size: 2rem; font-weight: 700; color: #f0f0f0; letter-spacing: -0.02em; margin-bottom: 0.5rem; }
+  .page-sub { color: var(--muted); font-size: 0.9rem; max-width: 520px; line-height: 1.6; margin-bottom: 3.5rem; }
+
+  .curriculum { display: flex; flex-direction: column; gap: 2.5rem; }
+
+  .chapter { border: 1px solid var(--border); background: var(--surface); }
+  .chapter-header { padding: 1.5rem; border-bottom: 1px solid var(--border); }
+  .chapter-num { font-family: monospace; font-size: 0.65rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.4rem; }
+  .chapter-title { font-size: 1.15rem; font-weight: 700; color: #f0f0f0; margin-bottom: 0.4rem; }
+  .chapter-desc { font-size: 0.875rem; color: var(--muted); line-height: 1.6; }
+
+  .lesson-list { list-style: none; }
+  .lesson-item { border-bottom: 1px solid var(--border); display: flex; align-items: stretch; }
+  .lesson-item:last-child { border-bottom: none; }
+  .lesson-link { display: flex; align-items: center; justify-content: space-between; padding: 1rem 1.5rem; text-decoration: none; color: var(--text); transition: background 0.15s; gap: 1rem; flex: 1; }
+  .lesson-link:hover { background: rgba(87,196,184,0.05); }
+  .lesson-title { font-size: 0.9rem; }
+  .lesson-link:hover .lesson-title { color: var(--accent); }
+  .lesson-badge { font-family: monospace; font-size: 0.65rem; letter-spacing: 0.1em; text-transform: uppercase; padding: 0.2rem 0.5rem; border: 1px solid; flex-shrink: 0; }
+  .badge-ready { color: var(--accent); border-color: rgba(87,196,184,0.4); }
+  .badge-soon { color: var(--muted); border-color: var(--border); }
+  .lesson-link.disabled { pointer-events: none; }
+  .problems-link { display: flex; align-items: center; padding: 1rem 1.25rem; border-left: 1px solid var(--border); text-decoration: none; color: var(--muted); font-family: monospace; font-size: 0.65rem; letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap; transition: background 0.15s, color 0.15s; flex-shrink: 0; }
+  .problems-link:hover { background: rgba(87,196,184,0.05); color: var(--accent); }
+
+  footer { border-top: 1px solid var(--border); padding: 2rem; color: var(--muted); font-size: 0.78rem; }
+  .footer-inner { max-width: 860px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; }
+  footer a { color: var(--muted); text-decoration: none; }
+  footer a:hover { color: var(--accent); }
+</style>
+
+<nav>
+  <div class="nav-inner">
+    <a class="logo" href="/">AXON</a>
+    <div class="nav-right">
+      <a href="/learn">Learn</a>
+      <a href="/blog">Blog</a>
+    </div>
+  </div>
+</nav>
+
+<main>
+  <p class="page-label">Curriculum</p>
+  <h1>PCLC Engineering from Scratch</h1>
+  <p class="page-sub">Everything you need to build physiologic closed-loop control systems: linear algebra, differential equations, PK/PD modeling, and controller design. Written for practitioners, not textbooks.</p>
+
+  <div class="curriculum">
+    {curriculum.map((chapter, i) => (
+      <div class="chapter">
+        <div class="chapter-header">
+          <p class="chapter-num">Chapter {i + 1}</p>
+          <p class="chapter-title">{chapter.title}</p>
+          <p class="chapter-desc">{chapter.description}</p>
+        </div>
+        <ul class="lesson-list">
+          {chapter.lessons.map((lesson, j) => (
+            <li class="lesson-item">
+              {lesson.ready ? (
+                <>
+                  <a class="lesson-link" href={`/learn/${chapter.slug}/${lesson.slug}`}>
+                    <span class="lesson-title">{j + 1}. {lesson.title}</span>
+                    <span class="lesson-badge badge-ready">read</span>
+                  </a>
+                  {lesson.problems && (
+                    <a class="problems-link" href={`/learn/${chapter.slug}/${lesson.slug}-problems`}>problems</a>
+                  )}
+                </>
+              ) : (
+                <span class="lesson-link disabled">
+                  <span class="lesson-title">{j + 1}. {lesson.title}</span>
+                  <span class="lesson-badge badge-soon">soon</span>
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      </div>
+    ))}
+  </div>
+</main>
+
+<footer>
+  <div class="footer-inner">
+    <span>AXON &copy; 2026</span>
+    <a href="/">runaxon.com</a>
+  </div>
+</footer>
+</Base>

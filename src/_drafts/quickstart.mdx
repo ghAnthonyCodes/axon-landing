@@ -1,0 +1,242 @@
+---
+layout: '../layouts/BlogPost.astro'
+title: "Myelin Quickstart"
+description: "Get 100–500× speedup on any ODE-based simulation in under 30 minutes. No C knowledge required."
+date: "2026-04-03"
+---
+
+This guide walks through setting up Myelin on a real simulation from scratch. By the end you will have a compiled C kernel running your ODE, a PID controller optimizing against a cohort, and a parallel grid search completing in under a second.
+
+The example model is a [Lotka-Volterra predator-prey system](https://github.com/runaxon/axon-plant-predator-prey) — a two-state ODE that any scientist or engineer can follow. The same steps apply to any ODE-based simulation.
+
+---
+
+## Prerequisites
+
+- Python 3.11+
+- A C compiler (`gcc` or `clang`) — already present on macOS and most Linux installs
+- An Anthropic API key (Myelin calls Claude twice to translate your ODE to C)
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+```
+
+---
+
+## 1. Clone Myelin and set up your environment
+
+Clone Myelin somewhere on your machine — it just needs to sit next to your project:
+
+```bash
+git clone https://github.com/runaxon/myelin-engine
+```
+
+Then set up a venv **inside your project** and install Myelin into it using the `-e` (editable) flag. This creates a live link to the Myelin source — any updates to Myelin are picked up automatically without reinstalling.
+
+```bash
+cd my-simulation
+python3 -m venv .venv
+source .venv/bin/activate
+pip install setuptools
+pip install -e ../myelin-engine
+pip install anthropic python-dotenv
+```
+
+Your project can now `from myelin import PlantAdapter` and Myelin will import your adapters using the same environment.
+
+Create a `.env` file in your project root with your API key:
+
+```
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+---
+
+## 2. Structure your project
+
+Myelin works on any directory. The only requirement is a file called `myelin_adapters.py` containing three classes. Everything else in your project stays untouched.
+
+```
+my-simulation/
+  .venv/               ← shared venv (myelin + your deps)
+  .env                 ← ANTHROPIC_API_KEY
+  my_model.py          ← your existing ODE
+  myelin_adapters.py   ← new file, three classes
+```
+
+---
+
+## 3. Write your ODE
+
+Your ODE must be a pure Python function — arithmetic only, no numpy, no external calls. If you already have one, you can use it directly.
+
+Here is the predator-prey ODE:
+
+```python
+# my_model.py
+
+def derivatives(state, inputs, params):
+    x, y   = state       # prey, predator populations
+    u_t,   = inputs      # harvest rate (control input)
+    alpha, beta, delta, gamma = params
+
+    dx = alpha * x - beta * x * y - u_t
+    dy = delta * x * y - gamma * y
+
+    return (dx, dy)
+
+def observe(state, params):
+    x, y = state
+    return x              # controller sees prey population
+```
+
+`derivatives()` is the right-hand side of your ODE. `observe()` returns the scalar measurement your controller sees. Both must be pure arithmetic.
+
+---
+
+## 4. Write your adapters
+
+Create `myelin_adapters.py` in your project root. Three classes, each wrapping a different component.
+
+### Plant — the ODE
+
+```python
+from myelin import Plant
+from my_model import derivatives as _derivatives, observe as _observe
+
+class MyPlant(Plant):
+    state_size  = 2      # number of state variables
+    input_size  = 1      # number of control inputs
+    params_size = 4      # number of model parameters
+    target      = 40.0   # default ISE reference (can be overridden at runtime)
+
+    def derivatives(self, t, state, inputs, params):
+        return _derivatives(state, inputs, params)
+
+    def observe(self, state, params):
+        return _observe(state, params)
+```
+
+`state_size`, `input_size`, and `params_size` tell Myelin how to size the C kernel. `derivatives()` and `observe()` are what Myelin translates to C — they must delegate to pure arithmetic.
+
+Test it before moving on:
+
+```bash
+python ../myelin-engine/main.py --target . --adapter plant
+```
+
+You should see the C kernel compile and the equivalence check pass before writing the next adapter.
+
+### Controller — the PID
+
+```python
+from myelin import Controller
+from controller.pid import PIDController
+
+class MyController(Controller):
+    def __init__(self, kp=1.0, ki=0.2, kd=0.4,
+                 setpoint=40.0, dt=0.05,
+                 max_rate=10.0, min_rate=0.0):
+        self._pid = PIDController(
+            kp=kp, ki=ki, kd=kd,
+            setpoint=setpoint, dt=dt,
+            max_rate=max_rate, min_rate=min_rate,
+        )
+
+    def step(self, measurement):
+        return self._pid.step(measurement)
+
+    def reset(self):
+        self._pid.reset()
+```
+
+All controller parameters are defined in `__init__` with defaults. Any of them can be swept by including them in `param_grid()` — the harness will instantiate the controller with the swept values. Myelin follows the delegation into `PIDController.step()`, verifies it is pure arithmetic, and generates a C struct.
+
+### Evaluator — the loss function
+
+```python
+from myelin import Evaluator
+
+class MyEvaluator(Evaluator):
+    def loss(self, measurement, target):
+        return (measurement - target) ** 2
+```
+
+`loss()` defines how a single observation contributes to the score. Myelin compiles it into the C kernel so loss accumulation happens in C with no Python boundary crossings per step.
+
+---
+
+## 5. Run Myelin
+
+Build each block incrementally as you write it:
+
+```bash
+cd my-simulation
+source .venv/bin/activate
+
+python ../myelin-engine/main.py --target . --adapter plant
+python ../myelin-engine/main.py --target . --adapter controller
+python ../myelin-engine/main.py --target . --adapter evaluator
+
+# run all blocks once everything is ready
+python ../myelin-engine/main.py --target .
+```
+
+Myelin:
+1. Detects your blocks via AST — no imports, no side effects
+2. Calls Claude to translate `derivatives()`, `observe()`, and `loss()` to C
+3. Generates a scalar C kernel with the full closed-loop simulation in one translation unit
+4. Compiles it and validates Python/C equivalence automatically
+
+---
+
+## 6. Run the grid search
+
+Still from your project directory with the venv active:
+
+```bash
+python .myelin/run_parallel.py
+```
+
+```
+  [parallel] 512 parameter combinations, 14 workers
+  [parallel] best: {kp: 2.0, ki: 0.8, kd: 0.2, loss: 0.00219}
+
+Completed 512 evaluations in 0.3s
+```
+
+512 parameter combinations × 200 scenarios × 1000 simulation steps. **0.3 seconds.**
+
+---
+
+## What Myelin generated
+
+Inside `.myelin/c_modules/` you will find:
+
+- `MyPlant_plant_c_core.c` — pure C simulation kernel, no Python dependency
+- `MyPlant_plant_c.c` — Python extension wrapping the core (used for testing)
+- `MyPlant_plant_c.so` — compiled extension, loaded by the harness
+
+The core C file is readable, auditable, and portable. It contains your ODE in C exactly as Claude translated it, surrounded by a prewritten RK4 integrator, PID struct, and simulation loop that Myelin maintains.
+
+---
+
+## How it works
+
+Myelin makes three decisions automatically:
+
+**Scalar kernel** — for a grid search you need one number per candidate (ISE loss), not a full time-series. Eliminating the time-series allocation is a 5–10× speedup on its own.
+
+**Translation unit constraint** — putting `derivatives_impl` and `rk4_step_impl` in the same C file means the four derivative calls per RK4 step are direct C function calls with zero overhead. Compiling them separately would leave Python call overhead on every step.
+
+**Pool initializer pattern** — the cohort (200 scenarios) is loaded once per worker process. Only `(kp, ki, kd)` tuples cross the IPC boundary per task, not serialized scenario objects.
+
+Each of these decisions is findable but not obvious. The [previous article](/blog/schnider-propofol-pid-optimization) shows what it takes to find them manually.
+
+---
+
+## Next steps
+
+- Browse the [reference implementation](https://github.com/runaxon/axon-plant-predator-prey) — the complete predator-prey model this guide is based on
+- Read [475× Speedup. One Command.](/blog/myelin-475x-one-command) for a deeper walkthrough of the decisions Myelin makes
+- [Submit a job to AXON](mailto:anthony@runaxon.com) to run larger sweeps on cloud compute

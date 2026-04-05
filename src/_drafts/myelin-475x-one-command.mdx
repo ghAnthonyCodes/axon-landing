@@ -1,0 +1,228 @@
+---
+layout: '../../layouts/BlogPost.astro'
+title: "475× Speedup. One Command."
+description: "The previous post showed how to get 308× speedup on a propofol simulator — profiling, Cython, translation unit constraints, parallelization. Here's how to get 475× without knowing any of that."
+date: "2026-04-03"
+thumbnail: "/images/blog/myelin-logo.svg"
+draft: true
+---
+
+*This is a draft pre-print shared for early feedback. The code and conclusions are complete but the writing is still being refined. Comments welcome at [anthony@runaxon.com](mailto:anthony@runaxon.com).*
+
+[The previous post](/blog/schnider-propofol-pid-optimization) walked through every step required to get 308× speedup on a propofol anesthesia simulator: profiling to find `rk4_step`, line-profiling to find the call overhead inside it, learning that both functions need to be in the same C translation unit, writing typed Cython with `noexcept nogil`, switching from time-series to scalar output, and parallelizing with the pool initializer pattern.
+
+Every decision was findable. None were obvious in advance.
+
+This post shows [Myelin](https://github.com/runaxon/myelin-engine) — a tool that makes those decisions automatically. The simulation is identical. The result is better: **475×**, not 308×. And the user writes three adapter classes.
+
+---
+
+## What the User Writes
+
+The entire user-facing change to the existing codebase is a single new file: `myelin_adapters.py`.
+
+It contains three classes.
+
+### PlantAdapter — the ODE
+
+```python
+from myelin import PlantAdapter
+
+class SchniderPlant(PlantAdapter):
+    state_size  = 4     # (x1, x2, x3, xe)
+    input_size  = 1     # infusion rate u(t)
+    params_size = 13    # PK/PD parameters
+    target      = 50.0  # BIS setpoint
+
+    def derivatives(self, t, state, inputs, params):
+        return schnider_derivatives(state, inputs, params)
+
+    def observe(self, state, params):
+        xe = state[3]
+        v1, _, _, _, _, _, _, _, _, e0, emax, ec50, gamma = params
+        ce = xe / (v1 * 1000.0)
+        if ce <= 0.0:
+            return e0
+        return max(0.0, e0 - emax * (ce ** gamma) / (ec50 ** gamma + ce ** gamma))
+```
+
+`derivatives()` is the ODE from the previous post, unchanged. `observe()` is the Hill equation — the scalar measurement the controller sees. Both are pure arithmetic. Myelin needs to know these two things and nothing else about the physics.
+
+### ControllerAdapter — the PID
+
+```python
+from myelin import ControllerAdapter
+
+class SchniderPIDController(ControllerAdapter):
+    def __init__(self, kp=4000.0, ki=400.0, kd=1600.0):
+        self._pid = PIDController(kp=kp, ki=ki, kd=kd)
+
+    def step(self, measurement):
+        return self._pid.step(measurement)
+
+    def reset(self):
+        self._pid.reset()
+```
+
+A thin wrapper over the existing `PIDController`. Myelin follows the delegation, finds the pure arithmetic in `PIDController.step()`, and generates the C struct.
+
+### EvaluatorAdapter — the grid search
+
+```python
+from myelin import EvaluatorAdapter
+
+class SchniderGridEvaluator(EvaluatorAdapter):
+    def __init__(self):
+        self._cohort = generate_cohort(n=200, seed=99)
+
+    def load_cohort(self):
+        return self._cohort
+
+    def param_grid(self):
+        return [
+            {'kp': kp, 'ki': ki, 'kd': kd}
+            for kp, ki, kd in itertools.product(KP_VALUES, KI_VALUES, KD_VALUES)
+        ]
+
+    def run_scenario(self, patient, params):
+        # called per patient per parameter combination
+        # Myelin replaces this with the scalar C kernel automatically
+        ...
+```
+
+`param_grid()` defines the 512 candidates. `load_cohort()` loads 200 patients. `run_scenario()` runs one patient against one parameter set. Myelin parallelizes across `param_grid()` and injects the C kernel into `run_scenario()`.
+
+---
+
+## What Myelin Does
+
+```bash
+python main.py --target ../axon-plant-schnider
+```
+
+```
+── Myelin ───────────────────────────────────────────────────────
+  PlantAdapter         SchniderPlant       (myelin_adapters)
+  ControllerAdapter    SchniderPIDController  (myelin_adapters)
+  EvaluatorAdapter     SchniderGridEvaluator  (myelin_adapters)
+
+  [plant] generating scalar kernel for SchniderPlant...
+  [plant] variable map: {u_t→i0, x1→s0, x2→s1, x3→s2, xe→s3, v1→p0, ...}
+  [plant] built SchniderPlant_plant_c
+  [controller] generating C for SchniderPIDController...
+  [controller] built SchniderPIDController_controller_c
+  [evaluator] emitted .myelin/run_parallel.py
+
+── Done ─────────────────────────────────────────────────────────
+  Plant C modules:      ['SchniderPlant_plant_c']
+  Controller C modules: ['SchniderPIDController_controller_c']
+  Evaluator harness:    .myelin/run_parallel.py
+```
+
+Three adapters detected, three optimizations applied. Then:
+
+```bash
+python .myelin/run_parallel.py
+```
+
+```
+  [parallel] 512 parameter combinations, 14 workers
+  [parallel] best: {kp: 4000.0, ki: 600.0, kd: 2000.0, loss: 1.79e-05}
+
+Completed 512 evaluations in 0.4s
+```
+
+Same best gains. Same loss value. **0.4 seconds.**
+
+---
+
+## How It Works
+
+Myelin makes three decisions automatically, corresponding to the three insights from the previous post.
+
+### Decision 1: The scalar kernel
+
+The previous post identified that for a grid search, you don't need a time-series. You need one number per candidate. Eliminating the `SimulationResult` list allocation cut another 5× on top of the physics speedup.
+
+Myelin generates a scalar C kernel automatically. It AST-parses `derivatives()` to extract the variable map, asks Claude for the C body of both `derivatives()` and `observe()` (~5 assignment statements each), then fills a prewritten RK4 template. The integrator, PID struct, simulation loop, and Python bindings are all prewritten. Claude only fills in the physics.
+
+The generated C function signature:
+
+```c
+simulate(params_tuple, kp, ki, kd, duration, dt, t_induction, t_maintenance) -> float
+```
+
+One Python call per patient per candidate. The entire 600-step simulation loop runs in C with zero Python boundary crossings.
+
+### Decision 2: Translation unit constraint
+
+The previous post showed that Cython-compiling `derivatives()` alone gave 1.03×. The fix required putting `derivatives()` and `rk4_step()` in the same `.pyx` file so the four calls per step become direct C function calls.
+
+Myelin generates a single C file containing both `derivatives_impl()` and `rk4_step_impl()`. `derivatives_impl()` is a `static` C function — invisible to Python, called directly by the RK4 loop with no overhead. This is the translation unit constraint applied automatically.
+
+### Decision 3: Pool initializer pattern
+
+The cohort (200 patients, serialized as Python objects) cannot be pickled cheaply across process boundaries. The pool initializer pattern loads the cohort once per worker process; only `(kp, ki, kd)` tuples travel across the IPC boundary per task.
+
+Myelin emits `.myelin/run_parallel.py` with this pattern prewritten:
+
+```python
+def _init_worker():
+    global _evaluator
+    _evaluator = SchniderGridEvaluator()   # cohort loaded once per worker
+
+def _run_one(params):
+    cohort = _evaluator.load_cohort()
+    losses = [_evaluator.run_scenario(p, params) for p in cohort]
+    return sum(losses) / len(losses)
+
+with Pool(initializer=_init_worker) as pool:
+    losses = pool.map(_run_one, grid)
+```
+
+---
+
+## Results
+
+Full grid search: 512 candidates × 200 patients × 600 steps.
+
+| | Time | Speedup |
+|---|---|---|
+| Pure Python (serial) | 185s | 1× |
+| Myelin: parallel only | 17s | 11× |
+| Myelin: C RK4 + parallel | 4.3s | 44× |
+| **Myelin: scalar kernel + parallel** | **0.4s** | **475×** |
+
+The previous post's manual result was 308×. Myelin exceeds it because the scalar kernel is cleaner than the Cython version — pure C with no Cython abstraction layer, and a prewritten template that's been tuned once rather than regenerated per project.
+
+The 21-day FDA validation baseline (10,000 cohort samples at 185s each) now runs in **under 2 hours**.
+
+---
+
+## What Myelin Doesn't Know
+
+Myelin does not understand the Schnider model. It does not know what BIS is, what propofol does, or what an effect site is. It knows three things:
+
+1. `derivatives()` is a function that takes state, inputs, and params and returns derivatives. It contains pure arithmetic.
+2. `observe()` is a function that extracts a scalar measurement from state. It contains pure arithmetic.
+3. `run_scenario()` is called per patient per parameter combination, so it should be parallelized.
+
+That is the entire interface. The physics lives in the adapter. The optimization lives in Myelin.
+
+---
+
+## The Broader Pattern
+
+The previous post ended with:
+
+> *Every model requires the same expertise applied from scratch. That process is what took time here. Not the coding. The knowing what to look for.*
+
+The three insights that produced 308× — translation unit constraint, scalar vs time-series, pool initializer — are not Schnider-specific. They apply to any ODE-based simulation with a controller and an outer evaluation loop. Epidemiology. Chemical reactors. Orbital mechanics. Climate models. Any system where the hot path is `derivatives()` called millions of times.
+
+Myelin's adapter interface is narrow enough to be reliable and general enough to cover the class of problems. A researcher who has never heard of `noexcept nogil` implements three methods and runs one command.
+
+That is the goal.
+
+---
+
+*Myelin is open source: [github.com/runaxon/myelin-engine](https://github.com/runaxon/myelin-engine). The reference simulation is [github.com/runaxon/axon-plant-schnider](https://github.com/runaxon/axon-plant-schnider).*
