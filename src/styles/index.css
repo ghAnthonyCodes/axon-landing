@@ -10,7 +10,8 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { font-size: 16px; scroll-behavior: smooth; }
 body { background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, sans-serif; line-height: 1.6; }
-.container { max-width: 860px; margin: 0 auto; padding: 0 2rem; }
+.container { max-width: 900px; margin: 0 auto; padding: 0 2rem; }
+.screenshot-section .container { max-width: 1100px; }
 nav { border-bottom: 1px solid var(--border); padding: 1.25rem 0; position: sticky; top: 0; background: var(--bg); z-index: 10; }
 nav .container { display: flex; align-items: center; justify-content: space-between; }
 .logo { font-family: monospace; font-size: 1.1rem; font-weight: 700; letter-spacing: 0.15em; color: var(--accent); text-transform: uppercase; text-decoration: none; }
@@ -22,7 +23,7 @@ nav .container { display: flex; align-items: center; justify-content: space-betw
 .hero { padding: 4rem 0 3.5rem; text-align: center; }
 .eyebrow { font-family: monospace; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.75rem; }
 h1 { font-size: clamp(2.25rem, 5vw, 3.5rem); font-weight: 700; line-height: 1.1; letter-spacing: -0.02em; margin-bottom: 1.5rem; color: #f0f0f0; }
-h1 em { font-style: normal; color: var(--accent); }
+h1 em, h2 em { font-style: normal; color: var(--accent); }
 .hero-sub { font-size: 1.1rem; color: var(--muted); max-width: 540px; margin: 0 auto 2.75rem; line-height: 1.7; }
 .cta-group { display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap; }
 .btn { padding: 0.75rem 1.75rem; font-size: 0.9rem; font-weight: 600; cursor: pointer; border: none; transition: opacity 0.2s, background 0.2s, color 0.2s; text-decoration: none; display: inline-block; letter-spacing: 0.02em; }
@@ -32,28 +33,29 @@ h1 em { font-style: normal; color: var(--accent); }
 .btn-secondary { background: transparent; color: var(--text); border: 1px solid var(--border); }
 .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
 .divider { border: none; border-top: 1px solid var(--border); margin: 0; }
-.how { padding: 5rem 0; }
+.how { padding: 2.5rem 0; scroll-margin-top: 4rem; }
 .section-label { font-family: monospace; font-size: 0.7rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent); margin-bottom: 1rem; }
-h2 { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.02em; color: #f0f0f0; margin-bottom: 0.6rem; }
+h2 { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.02em; color: var(--accent); margin-bottom: 1.25rem; }
 .section-sub { color: var(--muted); font-size: 0.95rem; margin-bottom: 3rem; }
 .steps { display: flex; flex-direction: column; gap: 0; }
-.step { display: grid; grid-template-columns: 3rem 1fr; gap: 1.25rem; padding: 1.5rem 0; border-bottom: 1px solid var(--border); align-items: start; }
+.step { display: grid; grid-template-columns: 3rem 1fr; gap: 1.25rem; padding: 1rem 0; border-bottom: 1px solid var(--border); align-items: start; }
 .step:first-child { border-top: 1px solid var(--border); }
 .step-num { font-family: monospace; font-size: 0.75rem; color: var(--accent); padding-top: 0.2rem; letter-spacing: 0.05em; }
-.step-title { font-weight: 600; color: #f0f0f0; margin-bottom: 0.3rem; font-size: 0.95rem; }
+.step-title { font-weight: 600; color: #f0f0f0 !important; margin-bottom: 0.3rem; font-size: 1rem; }
 .step p { color: var(--muted); font-size: 0.875rem; }
-.features { padding: 5rem 0; }
+.features { padding: 2.5rem 0; }
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1px; background: var(--border); border: 1px solid var(--border); }
 .card { background: var(--bg); padding: 1.75rem; }
-.card-icon { font-family: monospace; font-size: 0.7rem; color: var(--accent); letter-spacing: 0.1em; margin-bottom: 1rem; }
-.card-title { font-weight: 600; color: #f0f0f0; margin-bottom: 0.5rem; font-size: 0.95rem; }
+.card-icon { font-family: monospace; font-size: 0.7rem; color: var(--accent) !important; letter-spacing: 0.1em; margin-bottom: 0.75rem; }
+.card-title { font-weight: 700; color: #f0f0f0 !important; margin-bottom: 0.5rem; font-size: 1.05rem; }
 .card p { color: var(--muted); font-size: 0.875rem; line-height: 1.65; }
-.audience { padding: 5rem 0; }
+.audience { padding: 2.5rem 0; }
 .audience-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.25rem; margin-top: 2.5rem; }
 .audience-item { background: var(--surface); border: 1px solid var(--border); padding: 1.25rem 1.5rem; }
-.audience-item strong { display: block; color: #f0f0f0; font-size: 0.9rem; margin-bottom: 0.3rem; }
+.audience-icon { width: 2rem; height: 2rem; color: var(--accent); margin-bottom: 0.75rem; display: block; }
+.audience-item strong { display: block; color: #f0f0f0 !important; font-size: 0.9rem; margin-bottom: 0.3rem; }
 .audience-item span { color: var(--muted); font-size: 0.8rem; }
-.waitlist { padding: 3.5rem 0; border-top: 1px solid var(--border); text-align: center; }
+.waitlist { padding: 3.5rem 0 5rem; border-top: 1px solid var(--border); text-align: center; }
 .waitlist h2 { margin-bottom: 0.6rem; }
 .waitlist .section-sub { margin-bottom: 2.5rem; }
 form { max-width: 480px; margin: 0 auto; display: flex; flex-direction: column; gap: 0.75rem; text-align: left; }
@@ -67,6 +69,11 @@ textarea { resize: vertical; min-height: 80px; }
 .optional { color: var(--muted); font-size: 0.65rem; margin-left: 0.4rem; text-transform: none; letter-spacing: 0; }
 .form-submit { margin-top: 0.5rem; }
 .form-note { font-size: 0.75rem; color: var(--muted); text-align: center; margin-top: 0.75rem; }
+.discord-btn { margin-top: 1rem; padding: 0.9rem 2.5rem; font-size: 1rem; }
+.screenshot-section { padding: 2.5rem 0 4rem; }
+.screenshot-wrapper { border: 1px solid var(--border); background: var(--surface); }
+.screenshot-label { font-family: monospace; font-size: 0.65rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); padding: 0.5rem 0.85rem; border-bottom: 1px solid var(--border); }
+.screenshot { width: 100%; display: block; }
 .myelin { padding: 3.5rem 0; border-top: 1px solid var(--border); }
 .myelin-inner { display: grid; grid-template-columns: 1fr 1.6fr; gap: 1.5rem; align-items: center; }
 @media (max-width: 640px) { .myelin-inner { grid-template-columns: 1fr; gap: 2.5rem; } }

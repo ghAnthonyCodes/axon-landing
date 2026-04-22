@@ -5,9 +5,9 @@ const curriculum = [
   {
     title: "Linear Algebra",
     slug: "linear-algebra",
-    description: "The language of systems. Vectors, matrices, and transformations: the foundation everything else is built on.",
+    description: "The foundational language of vectors, matrices, and transformations.",
     lessons: [
-      { title: "Vectors and What They Actually Represent", slug: "01-vectors", ready: true, problems: true },
+      { title: "Vectors and What They Represent in Drug Modeling", slug: "01-vectors", ready: true, problems: true },
       { title: "Matrix Multiplication as Transformation", slug: "02-matrices", ready: false },
       { title: "Eigenvalues and System Behavior", slug: "03-eigenvalues", ready: false },
     ],
@@ -101,6 +101,7 @@ const curriculum = [
     <div class="nav-right">
       <a href="/learn">Learn</a>
       <a href="/blog">Blog</a>
+      {import.meta.env.DEV && <a href="/quickstart">Quickstart</a>}
     </div>
   </div>
 </nav>
@@ -108,7 +109,7 @@ const curriculum = [
 <main>
   <p class="page-label">Curriculum</p>
   <h1>PCLC Engineering from Scratch</h1>
-  <p class="page-sub">Everything you need to build physiologic closed-loop control systems: linear algebra, differential equations, PK/PD modeling, and controller design. Written for practitioners, not textbooks.</p>
+  <p class="page-sub">Everything you need to build physiologic closed-loop control systems: linear algebra, differential equations, PK/PD modeling, and controller design. Written for practitioners.</p>
 
   <div class="curriculum">
     {curriculum.map((chapter, i) => (

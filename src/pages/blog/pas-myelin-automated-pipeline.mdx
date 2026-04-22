@@ -1,0 +1,452 @@
+---
+draft: true
+layout: '../../layouts/BlogPost.astro'
+title: "The Manual Process Was the Bottleneck."
+description: "We implemented the Python Anesthesia Simulator in Myelin — propofol PK/PD, remifentanil PK/PD, a TCI controller, and a cohort evaluator. One command compiled all of it to C and parallelized it. Here's what that actually means."
+date: "2026-04-11"
+thumbnail: "/images/blog/pas_grid_search.png"
+---
+*This is a draft pre-print shared for early feedback. The code and conclusions are complete but the writing is still being refined. Comments welcome at [anthony@runaxon.com](mailto:anthony@runaxon.com).*
+
+In my last article, [here](/blog/schnider-propofol-pid-optimization), I built a propofol simulator in Python and manually accelerated it by compiling it to C. 
+
+I built a tool that simplifies that process, Myelin.
+
+Myelin is a Python library with importable building blocks to construct physiological closed-loop controller pipelines. The constructed pipeline will be in Python, but the execution will happen in C, and both automatically get tested for guarantees of their equivalence. 
+
+Ok, enough with the sales pitch. Let me show you how it works.
+
+Today's Guinea pig is the **Python Anesthesia Simulator (PAS)** — a multi-drug, multi-output clinical simulator built at [AnesthesiaSimulation](https://github.com/AnesthesiaSimulation/Python_Anesthesia_Simulator). 
+
+It models propofol and remifentanil simultaneously, outputs BIS and MAP, and is substantially more complex than the simulator I made in my first article.
+
+---
+
+## Prereqs
+Do this before starting.
+```cmd
+python3 -m venv .venv
+source .venv/bin/activate (or .\.venv\bin\Activate on Windows)
+pip install --upgrade pip
+pip install anthropic
+pip install dotenv
+pip install setuptools
+pip install -e <path-to-myelin-engine>
+```
+
+---
+
+## Block 1: The Plant
+
+The first thing we do is create our plant.
+We easily create a blank plant via a Myelin command:
+```cmd
+python ../myelin-engine/main.py --target . --create plant
+```
+
+This provides us with a skeleton Plant that we fill out like so.
+
+```python
+from myelin import Plant
+
+class MyPlant(Plant):
+
+    state_size = 8  # 4 for propofol and 4 for remifentanil
+    input_size = 2  # propofol and remifentanil
+    params_size = 19  # 7 for propofol and 7 for remifentanil 
+
+    def derivatives(self, state, inputs, params):
+        
+        # Unpackage inputs
+        u_prop, u_remi = inputs[0:2]
+
+        # Unpackage propofol compartments
+        x1_prop, x2_prop, x3_prop, Ce_prop = state[0:4]
+
+        # Unpackage remifentanil compartments
+        x1_remi, x2_remi, x3_remi, Ce_remi = state[4:8]
+
+        # Unpackage Propofol parameters
+        v1_prop, k10_prop, k12_prop, k13_prop, k21_prop, k31_prop, ke0_prop = params[0:7]
+
+        # Unpackage Remifentanil parameters
+        v1_remi, k10_remi, k12_remi, k13_remi, k21_remi, k31_remi, ke0_remi = params[7:14]
+
+        # Convert amount to concentration for compartment 1
+        C1_prop = x1_prop / (v1_prop * 1000.0)
+        C1_remi = x1_remi / (v1_remi * 1000.0)
+
+        # Propofol derivatives
+        dx1_prop_dt = (
+            + u_prop 
+            + k21_prop * x2_prop 
+            + k31_prop * x3_prop 
+            - (k10_prop + k12_prop + k13_prop) * x1_prop
+        )
+        dx2_prop_dt = k12_prop * x1_prop - k21_prop * x2_prop
+        dx3_prop_dt = k13_prop * x1_prop - k31_prop * x3_prop
+        dCe_prop_dt = ke0_prop * (C1_prop - Ce_prop)
+
+        # Remifentanil derivatives
+        dx1_remi_dt = (
+            + u_remi
+            + k21_remi * x2_remi
+            + k31_remi * x3_remi
+            - (k10_remi + k12_remi + k13_remi) * x1_remi
+        )
+        dx2_remi_dt = k12_remi * x1_remi - k21_remi * x2_remi
+        dx3_remi_dt = k13_remi * x1_remi - k31_remi * x3_remi
+        dCe_remi_dt = ke0_remi * (C1_remi - Ce_remi)
+        
+        # Package the derivatives
+        return (
+            dx1_prop_dt,
+            dx2_prop_dt,
+            dx3_prop_dt,
+            dCe_prop_dt,
+            dx1_remi_dt,
+            dx2_remi_dt,
+            dx3_remi_dt,
+            dCe_remi_dt
+        )
+```
+
+---
+
+## Block 2: Measurement
+
+Next, we create a block that translates our state to a measurement.
+
+```cmd
+python ../myelin-engine/main.py --target . --create measurement
+```
+
+For anesthesia, we implement [BIS](https://en.wikipedia.org/wiki/Bispectral_index) via 
+the Bouillon + Hill equation.
+
+```python
+from myelin import Measurement
+
+class MyMeasurement(Measurement):
+    def measure(self, state, params):
+
+      Ce_prop = state[3]
+      Ce_remi = state[7]
+
+      e0 = params[14]
+      emax = params[15]
+      c50_prop = params[16]
+      c50_remi = params[17]
+      gamma = params[18]
+
+      # Bouillon interaction model
+      U = (Ce_prop / c50_prop) + (Ce_remi / c50_remi)
+
+      # BIS calc from U
+      bis = e0 - emax * (U ** gamma) / (U ** gamma + 1.0)
+      return bis
+
+```
+
+---
+
+## Block 3: Controller
+
+We implement a basic PID controller that infuses a fixed Remifentanil rate and a 
+variable Propofol rate.
+
+```cmd
+python ../myelin-engine/main.py --target . --create controller
+```
+
+```python
+from myelin import Controller
+
+class MyController(Controller):
+
+    def __init__(self, kp, ki, kd, setpoint, remi_rate):
+        self.first_reading = True
+        self.kp = kp
+        self.ki = ki
+        self.kd = kd
+        self.setpoint = setpoint
+        self.integral = 0.0
+        self.prev_measurement = -1
+        self.remi_rate = remi_rate
+
+    def configure(self, dt):
+        self.dt = dt
+
+    def step(self, measurement):
+        # BIS > setpoint means deliver more
+        error = measurement - self.setpoint
+        p = self.kp * error
+        self.integral += error * self.dt
+        i = self.ki * self.integral
+        if self.first_reading:
+            d = 0
+            self.first_reading = True
+        else:
+            d = self.kd * (measurement - self.prev_measurement) / self.dt
+        u_propofol = p + i + d  # roll credits
+        self.prev_measurement = measurement
+        return u_propofol, self.remi_rate
+
+    def reset(self):
+        self.first_reading = True
+        self.integral = 0.0
+        self.prev_measurement = 0.0
+```
+
+---
+
+## Block 4: Patient Loader
+The patient loader's job is to convert demographic information (age, weight, height, 
+and biological sex) to physiological parameters.
+
+```cmd
+python ../myelin-engine/main.py --target . --create patient_loader
+```
+
+```python
+
+from myelin import PatientLoader
+import json
+
+def _lbm(weight, height, sex):
+    """Lean body mass (James formula). sex: 1=male, 0=female."""
+    if sex == 1:
+        return 1.10 * weight - 128 * (weight / height) ** 2
+    return 1.07 * weight - 148 * (weight / height) ** 2
+
+def schnider_params(age, weight, height, sex):
+    """
+    Schnider propofol PK parameters.
+    Returns (v1, k10, k12, k13, k21, k31, ke0) in units of L and 1/min.
+    """
+    lbm = _lbm(weight, height, sex)
+
+    cl1 = 1.89 + 0.0456 * (weight - 77) - 0.0681 * (lbm - 59) + 0.0264 * (height - 177)
+    cl2 = 1.29 - 0.024 * (age - 53)
+    cl3 = 0.836
+
+    v1 = 4.27
+    v2 = 18.9 - 0.391 * (age - 53)
+    v3 = 238.0
+
+    ke0 = 0.456  # 1/min
+
+    k10 = cl1 / v1
+    k12 = cl2 / v1
+    k13 = cl3 / v1
+    k21 = cl2 / v2
+    k31 = cl3 / v3
+
+    return (v1, k10, k12, k13, k21, k31, ke0)
+
+def minto_params(age, weight, height, sex):
+    """
+    Minto remifentanil PK parameters.
+    Returns (v1, k10, k12, k13, k21, k31, ke0) in units of L and 1/min.
+    """
+    lbm = _lbm(weight, height, sex)
+
+    cl1 = 2.6 - 0.0162 * (age - 40) + 0.0191 * (lbm - 55)
+    cl2 = 2.05 - 0.0301 * (age - 40)
+    cl3 = 0.076 - 0.00113 * (age - 40)
+
+    v1 = 5.1 - 0.0201 * (age - 40) + 0.072 * (lbm - 55)
+    v2 = 9.82 - 0.0811 * (age - 40) + 0.108 * (lbm - 55)
+    v3 = 5.42
+
+    ke0 = 0.595 - 0.007 * (age - 40)  # 1/min
+
+    k10 = cl1 / v1
+    k12 = cl2 / v1
+    k13 = cl3 / v1
+    k21 = cl2 / v2
+    k31 = cl3 / v3
+
+    return (v1, k10, k12, k13, k21, k31, ke0)
+
+def bouillon_params(age, weight, height, sex):
+    """
+    Bouillon BIS surface-response PD parameters.
+    Returns (e0, emax, c50_prop, c50_remi, gamma).
+
+    These are population means from Bouillon et al. (2004).
+    """
+    e0 = 93.0  # awake BIS
+    emax = 93.0  # maximum drug effect (BIS -> 0)
+    c50_prop = 3.08  # µg/mL propofol Ce at half-effect
+    c50_remi = 12.7  # ng/mL remifentanil Ce at half-effect (normalized)
+    gamma = 1.43  # Hill coefficient
+
+    return (e0, emax, c50_prop, c50_remi, gamma)
+
+class PASPatientLoader(PatientLoader):
+    default_id = ('adults', 1)
+
+    def load(self, patient_id):
+        """
+        Compute all 19 plant params from patient demographics.
+
+        params[0:7] — Schnider propofol PK (v1, k10, k12, k13, k21, k31, ke0)
+        params[7:14] — Minto remifentanil PK (v1, k10, k12, k13, k21, k31, ke0)
+        params[14:19] — Bouillon BIS PD (e0, emax, c50_prop, c50_remi, gamma)
+        """
+        cohort, pid = patient_id
+        with open(f'cohorts/{cohort}/{pid}.json') as f:
+            p = json.load(f)
+
+        age, weight, height, sex = p['age'], p['weight'], p['height'], p['sex']
+
+        prop_pk = schnider_params(age, weight, height, sex)
+        remi_pk = minto_params(age, weight, height, sex)
+        bis_pd = bouillon_params(age, weight, height, sex)
+
+        return prop_pk + remi_pk + bis_pd
+```
+
+---
+
+## Block 5: Scenario Loader
+
+Create the scenario loader.
+
+```cmd
+python ../myelin-engine/main.py --target . --adapter scenario_loader
+```
+
+The template itself has all of the code we already need.
+
+```python
+from myelin import ScenarioLoader
+import json
+
+class MyScenarioLoader(ScenarioLoader):
+
+    default_id = 'default'
+
+    def load(self, scenario_id):
+        """
+        Return scenario dict for the given scenario ID.
+
+        Returns
+        -------
+        dict with at minimum:
+            dt: float — timestep in simulation time units
+            duration: float — total simulation duration
+            target: float — controller setpoint
+            state0: tuple of floats — initial plant state
+        """
+        with open(f'scenarios/{scenario_id}.json') as f:
+            data = json.load(f)
+        return {
+            'dt': data['dt'],
+            'duration': data['duration'],
+            'target': data['target'],
+            'state0': tuple(data['state0'])
+        }
+```
+
+---
+
+## Block 6: Evaluator
+
+Next we need to create our scoring function, which will be used by the simulator
+to score each patient simulation. The details of the scoring function can be found in
+the last blog: [here](https://runaxon.com/blog/schnider-propofol-pid-optimization/)
+
+```cmd
+python ../myelin-engine/main.py --target . --create evaluator
+```
+
+```python
+from myelin import Evaluator
+
+# Loss function parameters — match axon-plant-schnider exactly
+BIS_TARGET = 50.0  # maintenance BIS target
+T_INDUCTION = 2.0  # min — BIS must cross below 60 by this time
+T_MAINTENANCE = 30.0  # min — end of maintenance window (washout excluded)
+LAMBDA = 500_000.0
+ISE_REF = BIS_TARGET ** 2 * (T_MAINTENANCE - T_INDUCTION)  # 70,000
+LAMBDA_NORM = LAMBDA / ISE_REF  # ~7.14
+
+class PASEvaluator(Evaluator):
+    def score(self, measurements, scenario):
+        """
+        ISE over maintenance window + induction penalty if BIS never crosses 60
+        within T_INDUCTION minutes. Normalized by ISE_REF so loss is in [0, ~1].
+        """
+        dt = scenario['dt']
+        ise = 0.0
+        induced = False
+        t = 0.0
+
+        for bis in measurements:
+            if t <= T_INDUCTION and bis < 60.0:
+                induced = True
+            if T_INDUCTION <= t <= T_MAINTENANCE:
+                ise += (bis - BIS_TARGET) ** 2 * dt
+            t += dt
+
+        induction_penalty = 0.0 if induced else LAMBDA_NORM
+        return ise / ISE_REF + induction_penalty
+
+    def aggregate(self, losses):
+        return sum(losses) / len(losses)
+```
+
+---
+
+## Register / Unit Tests / Transpile / Compile
+
+```cmd
+python ../myelin-engine/main.py --target . --adapter plant
+python ../myelin-engine/main.py --target . --adapter measurement
+python ../myelin-engine/main.py --target . --adapter controller
+python ../myelin-engine/main.py --target . --adapter patient_loader
+python ../myelin-engine/main.py --target . --adapter scenario_loader
+python ../myelin-engine/main.py --target . --adapter evaluator
+python ../myelin-engine/main.py --target . --adapter simulator
+```
+
+---
+
+## Create an Optimization Job
+
+In a file: `jobs/run.json`
+
+```json
+{
+    "scenario_id": "default",
+    "patient_ids": [["adults", 1]],
+    "controller": {
+        "kp": { 
+            "min": 1000.0,
+            "max": 5000.0,
+            "step": 50
+        },
+        "ki": {
+            "min": 0.0,
+            "max": 1000.0,
+            "step": 50
+        }, 
+        "kd": {
+            "min": 0.0,
+            "max": 2000.0,
+            "step": 50
+        },
+        "setpoint": 50.0,
+        "remi_rate": 10
+    }
+}
+```
+
+Run the optimization.
+```cmd
+python ../myelin-engine/main.py --target . --optimize jobs/run.json
+```
+<img src="/images/blog/optimize-results.png" alt="Myelin optimize output showing best loss and PID parameters from grid search" style="width:100%;border:1px solid rgba(212,212,212,0.1);" />
+<p style="font-size:0.8rem;color:#6a6a6a;margin-top:0.5rem;">Lowest loss and PID parameters from grid search.</p>

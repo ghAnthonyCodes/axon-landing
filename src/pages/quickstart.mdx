@@ -1,0 +1,484 @@
+---
+layout: '../layouts/DocsPost.astro'
+title: "Running Myelin Locally"
+description: "Build, compile, and validate simulation blocks on your machine. The same blocks run at scale on AXON."
+---
+
+Myelin is a local tool. You write simulation blocks in Python, Myelin compiles them to C, and validates each one against the Python reference before you move on. Once your blocks are validated locally, they are ready to run at scale on AXON.
+
+This guide walks through the full local workflow block by block.
+
+---
+
+## Installation
+
+### Prerequisites
+
+- Python 3.11+
+- A C compiler — `gcc` or `clang`, already present on macOS and most Linux installs
+- An Anthropic API key — Myelin calls Claude to translate your ODE and controller to C
+
+### Clone and install
+
+Clone Myelin somewhere on your machine:
+
+```bash
+git clone https://github.com/runaxon/myelin-engine
+```
+
+Set up a venv inside your project and install Myelin into it with the `-e` flag. This creates a live link to the Myelin source so updates are picked up automatically.
+
+```bash
+cd my-simulation
+python3 -m venv .venv
+source .venv/bin/activate
+pip install setuptools
+pip install -e ../myelin-engine
+pip install anthropic python-dotenv
+```
+
+Create a `.env` file in your project root:
+
+```
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+### Project structure
+
+Myelin works on any directory. The only requirement is a file called `myelin_adapters.py` in your project root containing your block subclasses.
+
+```
+my-simulation/
+  .venv/               ← venv (myelin + your deps)
+  .env                 ← ANTHROPIC_API_KEY
+  my_model.py          ← your existing ODE
+  myelin_adapters.py   ← Myelin blocks go here
+```
+
+---
+
+## Project setup
+
+The example used throughout this guide is a [Lotka-Volterra predator-prey system](https://github.com/runaxon/axon-plant-predator-prey) — a two-state ODE with prey population `x`, predator population `y`, and a harvest rate control input. The same steps apply to any ODE-based simulation.
+
+---
+
+## Plant
+
+The `Plant` block defines your ODE. Myelin reads `state_size`, `input_size`, and `params_size` to size the C kernel, then translates `derivatives()` to C.
+
+```python
+# myelin_adapters.py
+from myelin import Plant
+
+class MyPlant(Plant):
+    state_size  = 2   # x, y
+    input_size  = 1   # harvest rate u(t)
+    params_size = 4   # alpha, beta, delta, gamma
+
+    def derivatives(self, state, inputs, params):
+        x, y = state
+        u_t, = inputs
+        alpha, beta, delta, gamma = params
+        dx = alpha * x - beta * x * y - u_t
+        dy = delta * x * y - gamma * y
+        return (dx, dy)
+```
+
+Compile and validate:
+
+```bash
+python ../myelin-engine/main.py --target . --adapter plant
+```
+
+Expected output:
+
+```
+── Myelin ───────────────────────────────────────────────────────
+  Plant                MyPlant  (myelin_adapters)
+
+  [plant] found Plant subclass: MyPlant — 2 state variables, 1 input, 4 parameters
+  [plant] building Claude prompt for derivatives()...
+  [plant] transpiling with Claude...
+  [plant] Claude used 312 input tokens, 28 output tokens
+  [plant] prompt stored at .myelin/prompts/plant.md
+  [plant] C source written:
+            .myelin/src/c/plant.c
+            .myelin/src/py/plant_test.c
+  [plant] compiling...
+  [plant] build successful
+  [plant] running equivalence tests (Python derivatives vs C)...
+  [plant] ✓ all tests passed — Python/C match to 1.11e-16
+  [plant] ✓ plant C module compatible with AXON and passing validation
+  [plant] unit tests written:
+            .myelin/tests/test_plant.py
+  [plant] run with: python .myelin/tests/test_plant.py
+
+── Done ─────────────────────────────────────────────────────────
+```
+
+Verify the equivalence check passes before writing the next block.
+
+---
+
+## Measurement
+
+The `Measurement` block defines what the controller sees. It takes the full plant state and returns a scalar. Keeping this separate from the plant means you can swap sensors without touching the ODE.
+
+```python
+# myelin_adapters.py
+from myelin import Measurement
+
+class MyMeasurement(Measurement):
+    def measure(self, state, params):
+        return state[0]   # controller sees prey population
+```
+
+Compile and validate:
+
+```bash
+python ../myelin-engine/main.py --target . --adapter measurement
+```
+
+Expected output:
+
+```
+── Myelin ───────────────────────────────────────────────────────
+  Measurement          MyMeasurement  (myelin_adapters)
+
+  [measurement] found Measurement subclass: MyMeasurement — 2 state variables, 4 parameters
+  [measurement] transpiling with Claude...
+  [measurement] Claude used 198 input tokens, 8 output tokens
+  [measurement] prompt stored at .myelin/prompts/measurement.md
+  [measurement] C source written:
+            .myelin/src/c/measurement.c
+            .myelin/src/py/measurement_test.c
+  [measurement] compiling...
+  [measurement] build successful
+  [measurement] running equivalence tests (Python measure vs C)...
+  [measurement] ✓ all tests passed — Python/C match to 0.00e+00
+  [measurement] ✓ measurement C module compatible with AXON and passing validation
+  [measurement] unit tests written:
+            .myelin/tests/test_measurement.py
+  [measurement] run with: python .myelin/tests/test_measurement.py
+
+── Done ─────────────────────────────────────────────────────────
+```
+
+---
+
+## Controller
+
+The `Controller` block wraps your control law. All tunable parameters are defined in `__init__` with defaults — the Optimizer will sweep them. Do not include `dt` in `__init__`: it is a scenario-level setting and is injected by the harness via `configure(dt)` before the simulation starts.
+
+Myelin follows one level of delegation, so your controller can wrap an inner class.
+
+```python
+# myelin_adapters.py
+from myelin import Controller
+from controller.pid import PIDController
+
+class MyController(Controller):
+    def __init__(self, kp=1.0, ki=0.2, kd=0.4,
+                 setpoint=40.0,
+                 max_rate=10.0, min_rate=0.0):
+        self._pid = PIDController(
+            kp=kp, ki=ki, kd=kd,
+            setpoint=setpoint,
+            max_rate=max_rate, min_rate=min_rate,
+        )
+
+    def configure(self, dt):
+        self._pid.dt = dt
+
+    def step(self, measurement):
+        return self._pid.step(measurement)
+
+    def reset(self):
+        self._pid.reset()
+```
+
+`configure(dt)` is called once before any `step()` calls, with the `dt` from the active scenario. Myelin follows the delegation into `PIDController.step()`, verifies it is pure arithmetic, and generates a C struct with `make_state()`, `step()`, and `reset()`.
+
+Compile and validate:
+
+```bash
+python ../myelin-engine/main.py --target . --adapter controller
+```
+
+Expected output:
+
+```
+── Myelin ───────────────────────────────────────────────────────
+  Controller           MyController  (myelin_adapters)
+
+  [controller] found Controller subclass: MyController
+  [controller] verifying step() is pure arithmetic...
+  [controller] building Claude prompt for step()...
+  [controller] transpiling with Claude...
+  [controller] Claude used 441 input tokens, 312 output tokens
+  [controller] prompt stored at .myelin/prompts/controller.md
+  [controller] C source written:
+            .myelin/src/c/controller.c
+            .myelin/src/py/controller_test.c
+  [controller] compiling...
+  [controller] build successful
+  [controller] running equivalence tests (Python step() vs C step())...
+  [controller] ✓ all tests passed — Python/C match to 0.00e+00
+  [controller] ✓ controller C module compatible with AXON and passing validation
+  [controller] unit tests written:
+            .myelin/tests/test_controller.py
+  [controller] run with: pytest .myelin/tests/test_controller.py
+
+── Done ─────────────────────────────────────────────────────────
+```
+
+---
+
+## Simulator
+
+The Simulator has no subclass to write. Once Plant, Measurement, and Controller are compiled, run:
+
+```bash
+python ../myelin-engine/main.py --target . --adapter simulator
+```
+
+Myelin reads the metadata written by each prior build step and wires all three blocks into a single C translation unit — zero Python boundary crossings per simulation step.
+
+Expected output:
+
+```
+── Myelin ───────────────────────────────────────────────────────
+  Simulator            (manifest-driven)
+
+  [simulator] state=2  input=1  params=4  ctrl_params=6
+  [simulator] C source written:
+            .myelin/src/c/rk4.c
+            .myelin/src/c/simulate.c
+  [simulator] done — simulate.c ready for optimizer harness
+
+── Done ─────────────────────────────────────────────────────────
+```
+
+If a required block hasn't been compiled yet, Myelin will tell you which adapter to run first.
+
+---
+
+## ScenarioLoader
+
+The `ScenarioLoader` defines the simulation settings for a single run. Myelin calls `load(scenario_id)` at runtime to get `dt`, `duration`, `target`, and any other settings for that scenario.
+
+```python
+# myelin_adapters.py
+from myelin import ScenarioLoader
+import json
+
+class MyScenarioLoader(ScenarioLoader):
+    default_id = 'default'   # Myelin uses this to validate load()
+
+    def load(self, scenario_id):
+        with open(f'scenarios/{scenario_id}.json') as f:
+            s = json.load(f)
+        return {
+            'dt':       s['dt'],
+            'duration': s['duration'],
+            'target':   s['target'],
+            'state0':   tuple(s['state0']),  # initial conditions for this scenario
+        }
+```
+
+Validate:
+
+```bash
+python ../myelin-engine/main.py --target . --adapter scenario_loader
+```
+
+Expected output:
+
+```
+── Myelin ───────────────────────────────────────────────────────
+  ScenarioLoader       MyScenarioLoader  (myelin_adapters)
+
+  [scenario_loader] found ScenarioLoader subclass: MyScenarioLoader
+  [scenario_loader] validating load(scenario_id) interface...
+  [scenario_loader] ✓ load() returns valid scenario dict
+  [scenario_loader] ✓ ScenarioLoader compatible with AXON harness
+
+── Done ─────────────────────────────────────────────────────────
+```
+
+---
+
+## PatientLoader
+
+The `PatientLoader` loads a single patient's model parameters given a patient ID. Initial conditions (`state0`) belong in the scenario — they describe where the simulation starts, not how a patient's body works.
+
+```python
+# myelin_adapters.py
+from myelin import PatientLoader
+import json
+
+class MyPatientLoader(PatientLoader):
+    default_id = 0   # Myelin uses this to validate load()
+
+    def load(self, patient_id):
+        with open(f'cohort/{patient_id}.json') as f:
+            p = json.load(f)
+        return (p['alpha'], p['beta'], p['delta'], p['gamma'])
+```
+
+Myelin validates that `params` matches `params_size` declared in your Plant.
+
+Validate:
+
+```bash
+python ../myelin-engine/main.py --target . --adapter patient_loader
+```
+
+Expected output:
+
+```
+── Myelin ───────────────────────────────────────────────────────
+  PatientLoader         MyPatientLoader  (myelin_adapters)
+
+  [patient_loader] found PatientLoader subclass: MyPatientLoader
+  [patient_loader] validating load(patient_id) interface...
+  [patient_loader] ✓ load() returns params[4]
+  [patient_loader] ✓ PatientLoader compatible with AXON harness
+
+── Done ─────────────────────────────────────────────────────────
+```
+
+---
+
+## Evaluator
+
+The `Evaluator` defines what "good" means for a simulation. It has two methods:
+
+- `score(measurements, scenario)` — computes a scalar loss for one simulation run given the full measurement vector. Myelin transpiles this to C so scoring happens inside the C kernel with no Python overhead.
+- `aggregate(losses)` — combines per-patient scalars into a single job-level loss. Called once per job in Python.
+
+```python
+# myelin_adapters.py
+from myelin import Evaluator
+
+class MyEvaluator(Evaluator):
+    def score(self, measurements, scenario):
+        target = scenario['target']
+        dt = scenario['dt']
+        total = 0.0
+        for m in measurements:
+            total += (m - target) ** 2
+        return total * dt
+
+    def aggregate(self, losses):
+        return sum(losses) / len(losses)
+```
+
+`target` comes from the scenario at runtime — set it in your `ScenarioLoader`. `aggregate()` receives one scalar per patient and returns the job-level score.
+
+Compile and validate:
+
+```bash
+python ../myelin-engine/main.py --target . --adapter evaluator
+```
+
+Expected output:
+
+```
+── Myelin ───────────────────────────────────────────────────────
+  Evaluator            MyEvaluator  (myelin_adapters)
+
+  [evaluator] found Evaluator subclass: MyEvaluator
+  [evaluator] transpiling score() with Claude...
+  [evaluator] Claude used 389 input tokens, 156 output tokens
+  [evaluator] C source written:
+            .myelin/src/c/evaluator.c
+  [evaluator] compiling...
+  [evaluator] build successful
+  [evaluator] running equivalence tests (Python score() vs C score())...
+  [evaluator] ✓ all tests passed — Python/C match to 0.00e+00
+  [evaluator] ✓ evaluator C module compatible with AXON and passing validation
+  [evaluator] unit tests written:
+            .myelin/tests/test_evaluator.py
+
+── Done ─────────────────────────────────────────────────────────
+```
+
+---
+
+## Running and Optimizing
+
+There is no Optimizer subclass to write. The job JSON describes everything — which scenario, which patients, and which controller parameters to sweep. Scalar values are fixed. Objects with `min`, `max`, and `step` are swept.
+
+```json
+{
+    "scenario_id": "100_time_units",
+    "patient_ids": [1, 2, 3],
+    "controller": {
+        "kp": {"min": 0.0, "max": 5.0, "step": 0.1},
+        "ki": {"min": 0.0, "max": 1.0, "step": 0.05},
+        "kd": 0.0,
+        "setpoint": 0.667,
+        "max_rate": 2.0,
+        "min_rate": 0.0
+    },
+    "evaluator": {
+        "target": 0.667
+    }
+}
+```
+
+### Optimize
+
+Sweep all parameter combinations across the cohort, find the best, and save to `.myelin/best_params.json`:
+
+```bash
+python ../myelin-engine/main.py --target . --optimize jobs/job.json
+```
+
+```
+── Myelin ───────────────────────────────────────────────────────
+  [optimize] 1683 candidates × 3 patients = 5049 simulations
+  [optimize] workers=14
+  [optimize] running...
+  [optimize] best loss: 0.047569
+  [optimize] best params: {'kp': 0.0, 'ki': 0.22, 'kd': 0.0}
+  [optimize] 5049 simulations in 0.312s  (16183 sims/sec)
+  [optimize] best params saved — run: --run jobs/job.json
+
+── Done ─────────────────────────────────────────────────────────
+```
+
+### Run
+
+Run the best params from the last `--optimize` across the cohort and save per-patient traces:
+
+```bash
+python ../myelin-engine/main.py --target . --run jobs/job.json --save-traces traces/
+```
+
+```
+── Myelin ───────────────────────────────────────────────────────
+  [run] scenario=100_time_units  patients=3
+  [run] controller={'kp': 0.0, 'ki': 0.22, 'kd': 0.0, 'setpoint': 0.667, ...}
+  [run] running...
+  [run] aggregate loss: 0.047569
+  [run] 3 patients in 0.002s  (1832 sims/sec)
+  [run] traces written to traces/
+
+── Done ─────────────────────────────────────────────────────────
+```
+
+Each trace is a CSV with `measurement` and `action` columns — one row per timestep.
+
+### Debug
+
+Override specific params inline to inspect a single patient:
+
+```bash
+python ../myelin-engine/main.py --target . --run jobs/job.json \
+  --params '{"kp": 0.5, "ki": 0.1, "kd": 0.0}' --save-traces traces/
+```
+
+`--params` skips the `best_params.json` lookup and uses the inline values instead. All other fixed params still come from the job JSON.
